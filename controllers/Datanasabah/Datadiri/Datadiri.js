@@ -1,37 +1,8 @@
-import Users from "../../../models/UserModel.js";
 import Datadiri from "../../../models/Datanasabah/Datadiri/DatadiriModel.js"
 import Datausaha from "../../../models/Datanasabah/Datajaminan/DatajaminanModel.js";
 import Datajaminan from "../../../models/Datanasabah/Datajaminan/DatajaminanModel.js";
+import Users from "../../../models/UserModel.js";
 import db from "../../../config/Database.js";
-import { scanKTP } from "../../../utils/ktpOcr.js";
-import path from "path";
-
-export const scanKTPOnly = async (req, res) => {
-  try {
-    if (!req.files?.fotoKTP) {
-      return res.status(400).json({ msg: "Foto KTP wajib diupload" });
-    }
-
-    const fotoKTPFile = req.files.fotoKTP[0].filename;
-    const ktpPath = path.join("uploads", fotoKTPFile);
-    const raw = await scanKTP(ktpPath);
-
-    if (raw._confidence < 60) {
-      return res.status(422).json({
-        msg: "Kualitas scan KTP rendah, silakan ulangi",
-        rawOcr: raw,
-      });
-    }
-
-    res.status(200).json({
-      msg: "Scan KTP berhasil",
-      rawOcr: raw,
-    });
-  } catch (error) {
-    console.error("Error saat scan KTP:", error);
-    res.status(500).json({ msg: "Gagal scan KTP" });
-  }
-};
 
 export const getDatadiriAll = async (req, res) => {
   try {
@@ -64,13 +35,11 @@ export const getDataDiriByNIK = async (req, res) => {
       return res.status(400).json({ msg: "Parameter NIK tidak ditemukan!" });
     }
 
-    const datadiri = await Datadiri.findOne({
-      where: { nik },
-      include: [{
+    const datadiri = await Datadiri.findOne({ where: { nik },
+    include: [{
         model: Users,
         attributes: ["kdpegawai", "namalengkap", "kdkantor"],
-      }],
-    });
+      }], });
     if (!datadiri) {
       return res.status(404).json({ msg: "Data nasabah tidak ditemukan!" });
     }
@@ -89,43 +58,86 @@ export const getDataDiriByNIK = async (req, res) => {
 };
 
 export const createDataDiri = async (req, res) => {
+  
   try {
-    const { rawOcr } = req.body; 
-    if (!rawOcr || !rawOcr.nik) {
-      return res.status(400).json({ msg: "Data scan KTP tidak valid" });
+    const {
+      nik,
+      namalengkap,
+      tempatlahir,
+      tanggallahir,
+      jeniskelamin,
+      statusperkawinan,
+      agama,
+      kewarganegaraan,
+      nohp,
+      alamatlengkap,
+      rt,
+      rw,
+      desakelurahan,
+      kecamatan,
+      kabupaten,
+      provinsi,
+      jenisalamat,
+      jenispekerjaan,
+      namausaha,
+      lamabekerja,
+      penghasilanperbulan,
+      alamatpekerjaan,
+      penghasilantambahan,
+      totalpenghasilan,
+      pengeluaranbulanan,
+      cicilan,
+    } = req.body;
+
+    const fotoKTPFile = req.files?.fotoKTP?.[0]?.filename;
+    const selfieKTPFile = req.files?.selfieKTP?.[0]?.filename;
+
+    if (!fotoKTPFile || !selfieKTPFile) {
+      return res.status(400).json({
+        msg: "Foto KTP dan Selfie KTP wajib diupload",
+      });
     }
 
-    const normalizedKtpData = {
-      nik: rawOcr.nik,
-      namalengkap: rawOcr.namalengkap,
-      tempatlahir: rawOcr.tempatlahir,
-      tanggallahir: rawOcr.tanggallahir,
-      jeniskelamin: rawOcr.jeniskelamin,
-      agama: rawOcr.agama,
-      alamatlengkap: rawOcr.alamatlengkap,
-      rt: rawOcr.rt,
-      rw: rawOcr.rw,
-      desakelurahan: rawOcr.desakelurahan,
-      kecamatan: rawOcr.kecamatan,
-      kabupaten: rawOcr.kabupaten,
-      provinsi: rawOcr.provinsi,
-      jenispekerjaan: rawOcr.jenispekerjaan,
-      kewarganegaraan: rawOcr.kewarganegaraan,
-      fotoKTP: req.body.fotoKTP, 
-      selfieKTP: req.body.selfieKTP || null,
-      kdpegawai: req.userKdpegawai,
+    await Datadiri.create({
+      nik: nik,
+      namalengkap: namalengkap,
+      tempatlahir: tempatlahir,
+      tanggallahir: tanggallahir,
+      jeniskelamin: jeniskelamin,
+      statusperkawinan: statusperkawinan,
+      agama: agama,
+      kewarganegaraan: kewarganegaraan,
+      nohp: nohp,
+      fotoKTP: fotoKTPFile,
+      selfieKTP: selfieKTPFile,
+      alamatlengkap:alamatlengkap,
+      rt: rt,
+      rw: rw,
+      desakelurahan: desakelurahan,
+      kecamatan: kecamatan,
+      kabupaten: kabupaten,
+      provinsi: provinsi,
+      jenisalamat: jenisalamat,
+      jenispekerjaan: jenispekerjaan,
+      namausaha: namausaha,
+      lamabekerja: lamabekerja,
+      penghasilanperbulan: penghasilanperbulan,
+      alamatpekerjaan: alamatpekerjaan,
+      penghasilantambahan: penghasilantambahan,
+      totalpenghasilan: totalpenghasilan,
+      pengeluaranbulanan: pengeluaranbulanan,
+      cicilan:cicilan,
       role: "nasabah",
-    };
-
-    await Datadiri.create(normalizedKtpData);
+      kdpegawai: req.userKdpegawai,
+    });
 
     res.status(201).json({
-      msg: "Data nasabah berhasil disimpan",
-      Data: normalizedKtpData,
+      msg: "Data diri nasabah berhasil disimpan",
     });
+
   } catch (error) {
     console.error("CREATE DATA DIRI ERROR:", error);
-    res.status(500).json({ msg: "Gagal menyimpan data nasabah" });
+    res.status(500).json({ msg: error.message });
   }
 };
 
@@ -137,72 +149,54 @@ export const updateDataDiriNasabah = async (req, res) => {
       return res.status(400).json({ msg: "Parameter NIK tidak ditemukan!" });
     }
 
-    if (req.role !== "officer" && req.role !== "superadmin") {
-      return res.status(403).json({
-        msg: "Anda tidak memiliki hak akses untuk memperbarui data ini!",
-      });
-    }
-
     const datadiri = await Datadiri.findOne({ where: { nik } });
     if (!datadiri) {
       return res.status(404).json({ msg: "Data nasabah tidak ditemukan!" });
     }
 
-    const fotoKTPFile = req.files?.fotoKTP
-      ? req.files.fotoKTP[0].filename
-      : datadiri.fotoKTP;
-
-    const selfieKTPFile = req.files?.selfieKTP
-      ? req.files.selfieKTP[0].filename
-      : datadiri.selfieKTP;
-
-    let ktpData = {};
-
-    if (req.files?.fotoKTP) {
-      const ktpPath = path.join("uploads", fotoKTPFile);
-      ktpData = await scanKTP(ktpPath);
-    }
-
     const updateFields = {
-      nik: datadiri.nik,
-      namalengkap: ktpData.namalengkap ?? datadiri.namalengkap,
-      tempatlahir: ktpData.tempatlahir ?? datadiri.tempatlahir,
-      tanggallahir: ktpData.tanggallahir ?? datadiri.tanggallahir,
-      jeniskelamin: ktpData.jeniskelamin ?? datadiri.jeniskelamin,
-      statusperkawinan: ktpData.statusperkawinan ?? datadiri.statusperkawinan,
-      agama: ktpData.agama ?? datadiri.agama,
-      kewarganegaraan: ktpData.kewarganegaraan ?? datadiri.kewarganegaraan,
-      alamatlengkap: ktpData.alamatlengkap ?? datadiri.alamatlengkap,
-      rt: ktpData.rt ?? datadiri.rt,
-      rw: ktpData.rw ?? datadiri.rw,
-      desakelurahan: ktpData.desakelurahan ?? datadiri.desakelurahan,
-      kecamatan: ktpData.kecamatan ?? datadiri.kecamatan,
-      nohp: req.body.nohp ?? datadiri.nohp,
-      kabupaten: req.body.kabupaten ?? datadiri.kabupaten,
-      provinsi: req.body.provinsi ?? datadiri.provinsi,
-      jenisalamat: req.body.jenisalamat ?? datadiri.jenisalamat,
-      jenispekerjaan: req.body.jenispekerjaan ?? datadiri.jenispekerjaan,
-      namausaha: req.body.namausaha ?? datadiri.namausaha,
-      lamabekerja: req.body.lamabekerja ?? datadiri.lamabekerja,
-      penghasilanperbulan: req.body.penghasilanperbulan ?? datadiri.penghasilanperbulan,
-      alamatpekerjaan: req.body.alamatpekerjaan ?? datadiri.alamatpekerjaan,
-      penghasilantambahan: req.body.penghasilantambahan ?? datadiri.penghasilantambahan,
-      totalpenghasilan: req.body.totalpenghasilan ?? datadiri.totalpenghasilan,
-      pengeluaranbulanan: req.body.pengeluaranbulanan ?? datadiri.pengeluaranbulanan,
-      cicilan: req.body.cicilan ?? datadiri.cicilan,
+      namalengkap: req.body.namalengkap,
+      tempatlahir: req.body.tempatlahir,
+      tanggallahir: req.body.tanggallahir,
+      jeniskelamin: req.body.jeniskelamin,
+      statusperkawinan: req.body.statusperkawinan,
+      agama: req.body.agama,
+      kewarganegaraan: req.body.kewarganegaraan,
+      nohp: req.body.nohp,
       fotoKTP: fotoKTPFile,
       selfieKTP: selfieKTPFile,
-      kdpegawai: datadiri.kdpegawai,
+      alamatlengkap: req.body.alamatlengkap,
+      rt: req.body.rt,
+      rw: req.body.rw,
+      desakelurahan: req.body.desakelurahan,
+      kecamatan: req.body.kecamatan,
+      kabupaten: req.body.kabupaten,
+      provinsi: req.body.provinsi,
+      jenisalamat: req.body.jenisalamat,
+      jenispekerjaan: req.body.jenispekerjaan,
+      namausaha: req.body.namausaha,
+      lamabekerja: req.body.lamabekerja,
+      penghasilanperbulan: req.body.penghasilanperbulan,
+      alamatpekerjaan: req.body.alamatpekerjaan,
+      penghasilantambahan: req.body.penghasilantambahan,
+      totalpenghasilan: req.body.totalpenghasilan,
+      pengeluaranbulanan: req.body.pengeluaranbulanan,
+      cicilan: req.body.cicilan,
     };
+
+    // Hanya officer atau superadmin yang bisa update
+    if (req.role !== "officer" && req.role !== "superadmin") {
+      return res.status(403).json({ msg: "Anda tidak memiliki hak akses untuk memperbarui data ini!" });
+    }
+
+    const fotoKTPFile = req.files?.fotoKTP ? req.files.fotoKTP[0].filename : datadiri.fotoKTP;
+    const selfieKTPFile = req.files?.selfieKTP ? req.files.selfieKTP[0].filename : datadiri.selfieKTP;
 
     await Datadiri.update(updateFields, { where: { nik } });
 
-    res.status(200).json({
-      msg: "Data nasabah berhasil diperbarui",
-      ocrUpdated: !!req.files?.fotoKTP,
-    });
+    res.status(200).json({ msg: "Data nasabah berhasil diperbarui!" });
   } catch (error) {
-    console.error("Error update data nasabah:", error);
+    console.error("Error saat update data nasabah:", error);
     res.status(500).json({ msg: "Terjadi kesalahan server" });
   }
 };

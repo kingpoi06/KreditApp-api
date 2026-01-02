@@ -11,6 +11,8 @@ import TokenRoute from "./routes//login/TokenRoute.js";
 import bodyParser from "body-parser";
 
 import DatadiriRoute from "./routes/Datanasabah/Datadiri/DatadiriRoute.js";
+import DashboardNasabahRoute from "./routes/Datanasabah/Datadiri/DashboardDataRoute.js";
+import ocrKTPRoute from "./routes/Datanasabah/Datadiri/ocrKTPRoute.js"
 import DatausahaRoute from "./routes/Datanasabah/Datausaha/DatausahaRoute.js";
 import DatajaminanRoute from "./routes/Datanasabah/Datajaminan/DatajaminanRoute.js";
 
@@ -25,7 +27,7 @@ app.use(express.static("upload"));
 app.use(
   cors({
     credentials: true,
-    origin: ["http://localhost:5173"],
+    origin: ["http://10.20.20.122:5173"],
     // origin: true,
   })
 );
@@ -55,6 +57,8 @@ app.use(TokenRoute);
 
 // 6. Define protected routes
 app.use(verifyToken, verifyUser, UserRoute);
+app.use(verifyToken, verifyUser, DashboardNasabahRoute)
+app.use(verifyToken, verifyUser, ocrKTPRoute);
 app.use(verifyToken, verifyUser, DatadiriRoute);
 app.use(verifyToken, verifyUser, DatausahaRoute);
 app.use(verifyToken, verifyUser, DatajaminanRoute);

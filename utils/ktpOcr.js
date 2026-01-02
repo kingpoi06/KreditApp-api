@@ -30,9 +30,9 @@ export const scanKTP = async (imagePath) => {
 
     const match = (regex) => text.match(regex)?.[1]?.trim() || null;
 
-    let nik = text.match(/N[I1]K[^0-9]{0,10}([0-9]{16})/)?.[1] || null;
+    let nikKTP = text.match(/N[I1]K[^0-9]{0,10}([0-9]{16})/)?.[1] || null;
 
-    if (!nik) {
+    if (!nikKTP) {
         const nikOCR = await Tesseract.recognize(imagePath, "eng", {
         tessedit_char_whitelist: "0123456789",
         tessedit_pageseg_mode: 6,
@@ -41,7 +41,7 @@ export const scanKTP = async (imagePath) => {
     const angkaSaja = nikOCR.data.text.replace(/\D/g, "");
 
     if (angkaSaja.length >= 16) {
-      nik = angkaSaja.slice(0, 16);
+      nikKTP = angkaSaja.slice(0, 16);
     }
      }
 
@@ -92,7 +92,7 @@ export const scanKTP = async (imagePath) => {
     const kewarganegaraan = kewarganegaraanMatch?.[1]?.trim() || null;
 
     return {
-        nik,
+        nikKTP,
         namalengkap,
         tempatlahir,
         tanggallahir,
