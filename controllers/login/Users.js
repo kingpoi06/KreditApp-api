@@ -1,10 +1,38 @@
-import Users from "../../models/UserModel.js";
+import Users from "../../models/UserModel/UserModel.js";
 import argon2 from "argon2";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import crypto from "crypto";
 
 dotenv.config();
+
+const generatePassword = (length = 10) => {
+  const safeLength = Math.max(4, Math.min(length, 10));
+  const upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const lower = "abcdefghijklmnopqrstuvwxyz";
+  const digits = "0123456789";
+  const symbols = "!@#$%^&*";
+  const all = upper + lower + digits + symbols;
+
+  const pick = (set) => set[crypto.randomInt(set.length)];
+  const passwordChars = [
+    pick(upper),
+    pick(lower),
+    pick(digits),
+    pick(symbols),
+  ];
+
+  for (let i = passwordChars.length; i < safeLength; i += 1) {
+    passwordChars.push(pick(all));
+  }
+
+  for (let i = passwordChars.length - 1; i > 0; i -= 1) {
+    const j = crypto.randomInt(i + 1);
+    [passwordChars[i], passwordChars[j]] = [passwordChars[j], passwordChars[i]];
+  }
+
+  return passwordChars.join("");
+};
 
 export const getUsers = async (req, res) => {
   try {
@@ -42,22 +70,16 @@ export const createUser = async (req, res) => {
     namalengkap, 
     jabatan, 
     kdkantor, 
+    cabangKantor,
+    alamatKantor,
+    telpKantor,
     email,
-    password,
-    confPassword,
     role,
   } = req.body;
 
   console.log(req.body);
-  if (!password || !confPassword) {
-    return res.status(400).json({ msg: "Password dan Konfirmasi Password wajib diisi!" });
-  }
-
-  if (password !== confPassword) {
-    return res.status(400).json({ msg: "Password dan Konfirmasi Password tidak cocok!" });
-  }
-
-  const hashPassword = await argon2.hash(password);
+  const generatedPassword = generatePassword(10);
+  const hashPassword = await argon2.hash(generatedPassword);
   try {
     await Users.create({
       kdpegawai: kdpegawai,
@@ -66,6 +88,9 @@ export const createUser = async (req, res) => {
       namalengkap: namalengkap,
       email: email,
       kdkantor: kdkantor,
+      cabangKantor: cabangKantor,
+      alamatKantor: alamatKantor,
+      telpKantor: telpKantor,
       password: hashPassword,
       role: role,
     });
@@ -95,7 +120,7 @@ export const createUser = async (req, res) => {
       <p>Selamat! Pendaftaran akun <em>Account Officer</em> Anda berhasil. Berikut adalah informasi akun Anda:</p>
       <ul>
         <li><strong>Username:</strong> ${username}</li>
-        <li><strong>Password:</strong> ${password}</li>
+        <li><strong>Password:</strong> ${generatedPassword}</li>
         <li><strong>User:</strong> ${role}</li>
       </ul>
       <h3>Informasi Penting:</h3>
@@ -204,6 +229,9 @@ export const updateAll = async (req, res) => {
     namalengkap,
     jabatan,
     kdkantor,
+    cabangKantor,
+    alamatKantor,
+    telpKantor,
     email,
     password,
     confPassword,
@@ -230,6 +258,9 @@ export const updateAll = async (req, res) => {
         email: email || user.email,
         namalengkap: namalengkap || user.namalengkap,
         kdkantor: kdkantor || user.kdkantor,
+        cabangKantor: cabangKantor || user.cabangKantor,
+        alamatKantor: alamatKantor || user.alamatKantor,
+        telpKantor: telpKantor || user.telpKantor,
         kdpegawai: kdpegawai || user.kdpegawai,
         jabatan: jabatan || user.jabatan,
         password: hashPassword, 
@@ -298,10 +329,14 @@ export const updateUser = async (req, res) => {
     namalengkap,
     jabatan,
     kdkantor,
+    cabangKantor,
+    alamatKantor,
+    telpKantor,
     email,
     role,
   } = req.body;
 
+  const hashPassword = user.password;
 
   try {
     
@@ -311,6 +346,9 @@ export const updateUser = async (req, res) => {
         email: email || user.email,
         namalengkap: namalengkap || user.namalengkap,
         kdkantor: kdkantor || user.kdkantor,
+        cabangKantor: cabangKantor || user.cabangKantor,
+        alamatKantor: alamatKantor || user.alamatKantor,
+        telpKantor: telpKantor || user.telpKantor,
         kdpegawai: kdpegawai || user.kdpegawai,
         jabatan: jabatan || user.jabatan,
         password: hashPassword, 

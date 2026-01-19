@@ -1,4 +1,4 @@
-import Users from "../models/UserModel.js";
+import Users from "../models/UserModel/UserModel.js";
 
 const checkRole = (roles) => async (req, res, next) => {
   try {
@@ -22,11 +22,12 @@ const checkRole = (roles) => async (req, res, next) => {
     return res.status(500).json({ msg: "Internal server error" });
   }
 };
+
 export const superadminOnly = checkRole(["superadmin"]);
 export const officerOnly = checkRole(["officer"]);
 export const ketuacabangOnly = checkRole(["ketuacabang"]);
 export const dirutOnly = checkRole(["dirut"]);
-export const getAllOnly = checkRole(["superadmin", "officer", "ketuacabang", "dirut"]);
+export const getAllOnly = checkRole(["superadmin", "officer", "ketuacabang", "komitecabang"]);
 export const updateOnly = checkRole(["superadmin", "officer"]);
 export const getPrivateOnly = checkRole(["superadmin", "ketuacabang", "dirut"]);
 

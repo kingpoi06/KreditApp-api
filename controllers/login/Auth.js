@@ -1,6 +1,10 @@
-import Users from "../../models/UserModel.js";
+import Users from "../../models/UserModel/UserModel.js";
 import jwt from "jsonwebtoken";
 import argon2 from "argon2";
+import { decrypt, encrypt } from "../../middleware/cryptoUtils.js";
+import crypto from "crypto";
+
+const secretKey = process.env.CRYPTO_SECRET_KEY;
 
 export const postLogin = async (req, res) => {
   console.log("postLogin called");
@@ -24,24 +28,33 @@ export const postLogin = async (req, res) => {
         .json({ msg: "Password Salah. Silahkan Masukan Lagi!" });
     }
 
+    if (!secretKey) {
+      console.error("CRYPTO_SECRET_KEY is not configured");
+      return res.status(500).json({ msg: "Konfigurasi enkripsi tidak tersedia" });
+    }
+
     const { kdpegawai, username, namalengkap, jabatan, kdkantor, email, role } =
       user;
 
+    const sessionId = crypto.randomBytes(32).toString("hex");
+
     const accessToken = jwt.sign(
-      {kdpegawai, username, namalengkap, jabatan, kdkantor, email, role },
+      {kdpegawai, username, namalengkap, jabatan, kdkantor, email, role, sessionId },
       process.env.ACCESS_TOKEN_SECRET,
-      { expiresIn: "900s" }
+      { expiresIn: "28000s" }
     );
 
     const refreshToken = jwt.sign(
-      {kdpegawai, username, namalengkap, jabatan, kdkantor, email, role },
+      {kdpegawai, username, namalengkap, jabatan, kdkantor, email, role, sessionId },
       process.env.REFRESH_TOKEN_SECRET,
-      { expiresIn: "3600s" }
+      { expiresIn: "28000s" }
     );
+
+    const encryptedRefreshToken = encrypt(refreshToken, secretKey);
 
     // Update jwt_token di database
     await Users.update(
-      { jwt_token: refreshToken },
+      { jwt_token: encryptedRefreshToken, sessionId },
       {
         where: { kdpegawai: user.kdpegawai },
       }
@@ -67,6 +80,11 @@ export const postLogin = async (req, res) => {
 
 export const deleteLogout = async (req, res) => {
   try {
+   if (!secretKey) {
+     console.error("CRYPTO_SECRET_KEY is not configured");
+     return res.status(500).json({ msg: "Konfigurasi enkripsi tidak tersedia" });
+   }
+
    const refreshToken = req.cookies.refreshToken; // ✅ Ambil token dari cookie
    console.log("Attempting logout, received refreshToken:", refreshToken);
 
@@ -75,17 +93,58 @@ export const deleteLogout = async (req, res) => {
      return res.sendStatus(401); // Unauthorized
    }
 
+   let decoded;
+   try {
+     decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, {
+       ignoreExpiration: true,
+     });
+   } catch (verifyError) {
+     console.log(
+       "Invalid refreshToken for logout:",
+       verifyError && verifyError.message ? verifyError.message : verifyError
+     );
+     return res.sendStatus(403);
+   }
+
+   if (!decoded || !decoded.kdpegawai || !decoded.sessionId) {
+     console.log("RefreshToken payload missing kdpegawai.");
+     return res.sendStatus(403);
+   }
+
    const user = await Users.findOne({
-     where: { jwt_token: refreshToken },
+     where: { kdpegawai: decoded.kdpegawai },
    });
 
-   if (!user) {
+   if (!user || !user.jwt_token || !user.sessionId) {
      console.log("User not found for the provided refreshToken.");
      return res.sendStatus(404); // User not found
    }
 
+   if (user.sessionId !== decoded.sessionId) {
+     console.log("Session mismatch during logout.");
+     return res.sendStatus(403);
+   }
+
+   let storedRefreshToken = user.jwt_token;
+   if (storedRefreshToken && storedRefreshToken.includes(":")) {
+     try {
+       storedRefreshToken = decrypt(storedRefreshToken, secretKey);
+     } catch (decryptError) {
+       console.error("Failed to decrypt stored refreshToken:", decryptError);
+       return res.sendStatus(403);
+     }
+   }
+
+   if (storedRefreshToken !== refreshToken) {
+     console.log("RefreshToken mismatch during logout.");
+     return res.sendStatus(403);
+   }
+
    // ✅ Hapus refreshToken dari database
-   await Users.update({ jwt_token: null }, { where: { kdpegawai: user.kdpegawai } });
+   await Users.update(
+     { jwt_token: null, sessionId: null },
+     { where: { kdpegawai: user.kdpegawai } }
+   );
    console.log(`Successfully removed refreshToken for user with Kode Pegawai: ${user.kdpegawai}`);
 
    // ✅ Hapus cookie di browser

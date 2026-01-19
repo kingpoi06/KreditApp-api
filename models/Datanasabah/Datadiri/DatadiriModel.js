@@ -1,6 +1,6 @@
 import { Sequelize } from "sequelize";
 import db from "../../../config/Database.js";
-import Users from "../../UserModel.js"
+import Permohonan from "../generateNoPermohonan/PermohonanModel.js"
 
 const { DataTypes } = Sequelize;
 
@@ -16,21 +16,21 @@ const Datadiri = db.define(
         notEmpty: true,
       },
     },
-    namalengkap: {
+    namaLengkap: {
       type: DataTypes.STRING(100),
       allowNull: false,
       validate: {
         notEmpty: true,
       },
     },
-    tempatlahir: {
-      type: DataTypes.STRING(50),
+    tempatLahir: {
+      type: DataTypes.STRING(100),
       allowNull: false,
       validate: {
         notEmpty: true,
       },
     },
-    tanggallahir: {
+    tanggalLahir: {
       type: DataTypes.DATEONLY,
       allowNull: false,
       validate: {
@@ -38,14 +38,14 @@ const Datadiri = db.define(
         notEmpty: true,
       },
     },
-    jeniskelamin: {
+    jenisKelamin: {
       type: DataTypes.STRING(20),
       allowNull: false,
       validate: {
         notEmpty: true,
       },
     },
-    statusperkawinan: {
+    statusPerkawinan: {
       type: DataTypes.STRING(100),
       allowNull: false,
       validate: {
@@ -66,12 +66,56 @@ const Datadiri = db.define(
         notEmpty: true,
       },
     },
-    nohp: {
+    kontakPribadi: {
       type: DataTypes.STRING(20),
       allowNull: false,
       validate: {
         notEmpty: true,
       },
+    },
+    anakTanggungan: {
+      type: DataTypes.STRING(10),
+      allowNull: true,
+    },
+    alamatLengkap: {
+      type: DataTypes.TEXT("long"),
+      allowNull: true,
+    },
+    rt: {
+      type: DataTypes.STRING(10),
+      allowNull: true,
+    },
+    rw: {
+      type: DataTypes.STRING(10),
+      allowNull: true,
+    },
+    desaKelurahan: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    kecamatan: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    kabupaten: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    provinsi: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    titikmaps: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    jenispekerjaan: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    namaIbuKandung: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
     },
     fotoKTP: {
       type: DataTypes.STRING(100),
@@ -88,153 +132,60 @@ const Datadiri = db.define(
       },
     },
 
-    //Alamat Domisili
-    alamatlengkap: {
-      type: DataTypes.TEXT('long'),
+    nikPenanggungJawab: {
+      type: DataTypes.STRING(16),
       allowNull: false,
+      field: "nikPasangan",
       validate: {
         notEmpty: true,
       },
     },
-    rt: {
-      type: DataTypes.STRING(10),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
-    rw: {
-      type: DataTypes.STRING(10),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
-    desakelurahan: {
+    namaPenanggungJawab: {
       type: DataTypes.STRING(100),
       allowNull: false,
+      field: "namaPasangan",
       validate: {
         notEmpty: true,
       },
     },
-    kecamatan: {
+    pekerjaanPenanggungJawab: {
       type: DataTypes.STRING(100),
       allowNull: false,
+      field: "pekerjaanPasangan",
       validate: {
         notEmpty: true,
       },
     },
-    kabupaten: {
+    tempatLahirPenanggungJawab: {
       type: DataTypes.STRING(100),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
-    provinsi: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
-    jenisalamat: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
-
-    //Data Pekerjaan
-    jenispekerjaan: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
-    namausaha: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
-    lamabekerja: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
-    penghasilanperbulan: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
-    alamatpekerjaan: {
-      type: DataTypes.TEXT('long'),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
-    penghasilantambahan: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
-
-    //DATA PENGHASILAN
-    totalpenghasilan: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
-    pengeluaranbulanan: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
-    cicilan: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
-
-    // STATUS PENGAJUAN KREDIT
-    statusPengajuan: {
-      type: DataTypes.ENUM(
-        "PROSES PENGAJUAN",
-        "SUDAH DIAJUKAN",
-        "DITOLAK"
-      ),
-      allowNull: false,
-      defaultValue: "PROSES PENGAJUAN",
-    },
-    tanggalDiajukan: {
-      type: DataTypes.DATE,
-      allowNull: true,
-      defaultValue: DataTypes.NOW,
-    },
-    tanggalDisetujui: {
-      type: DataTypes.DATE,
       allowNull: true,
     },
-    tanggalDitolak: {
-      type: DataTypes.DATE,
+    tanggalLahirPenanggungJawab: {
+      type: DataTypes.DATEONLY,
       allowNull: true,
+      validate: {
+        isDate: true,
+      },
+    },
+    noHPPenanggungJawab: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      field: "kontakPasangan",
+      validate: {
+        notEmpty: true,
+      },
+    },
+    hubunganDenganPemohon: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    fotoKTPPenanggungJawab: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+      field: "fotoKTPPasangan",
+      validate: {
+        notEmpty: true,
+      },
     },
 
     //Role Akun Pengguna
@@ -245,16 +196,17 @@ const Datadiri = db.define(
         notEmpty: true,
       },
     },
-
     kdpegawai: {
       type: DataTypes.STRING(18),
+      allowNull: true,
+    },
+
+    no_permohonan: {
+      type: DataTypes.STRING(50),
       allowNull: false,
-      references: {
-        model: Users,
-        key: "kdpegawai",
+      validate: {
+        notEmpty: true,
       },
-      onUpdate: "CASCADE",
-      onDelete: "RESTRICT",
     },
   },
   {
@@ -263,7 +215,7 @@ const Datadiri = db.define(
   }
 );
 
-Users.hasMany(Datadiri);
-Datadiri.belongsTo(Users, { foreignKey: "kdpegawai"});
+Permohonan.hasOne(Datadiri, { foreignKey: "no_permohonan" });
+Datadiri.belongsTo(Permohonan, { foreignKey: "no_permohonan"});
 
 export default Datadiri;

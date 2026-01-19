@@ -1,17 +1,19 @@
 import express from "express";
 import {
   getUsers,
+  getUserByKdpegawai,
   updateAll,
   createUser,
   updateUser,
   editPassword,
   deleteUser,
 } from "../controllers/login/Users.js";
-import { superadminOnly } from "../middleware/userOnly.js";
+import { superadminOnly, getAllOnly } from "../middleware/userOnly.js";
 
 const router = express.Router();
 
-router.get("/users",superadminOnly, getUsers);
+router.get("/users",getAllOnly, getUsers);
+router.get("/users/:kdpegawai", getUserByKdpegawai);
 router.post("/users", superadminOnly, createUser);
 router.patch("/usersUpdateAll/:kdpegawai", superadminOnly,  updateAll);
 router.patch("/userUpdateProfile/:kdpegawai",superadminOnly,  updateUser);

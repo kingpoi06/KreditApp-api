@@ -9,26 +9,35 @@ import UserRoute from "./routes/UserRoute.js";
 import AuthRoute from "./routes//login/AuthRoute.js";
 import TokenRoute from "./routes//login/TokenRoute.js";
 import bodyParser from "body-parser";
+import path from "path";
 
+import PermohonanRoute from "./routes/Datanasabah/Permohonan/PermohonanRoute.js";
 import DatadiriRoute from "./routes/Datanasabah/Datadiri/DatadiriRoute.js";
-import DashboardNasabahRoute from "./routes/Datanasabah/Datadiri/DashboardDataRoute.js";
-import ocrKTPRoute from "./routes/Datanasabah/Datadiri/ocrKTPRoute.js"
-import DatausahaRoute from "./routes/Datanasabah/Datausaha/DatausahaRoute.js";
-import DatajaminanRoute from "./routes/Datanasabah/Datajaminan/DatajaminanRoute.js";
-
+import DashboardNasabahRoute from "./routes/Datanasabah/Permohonan/DashboardDataRoute.js";
+import ocrKTPRoute from "./routes/Datanasabah/Datadiri/OCRktp/ocrKTPRoute.js"
+import DatausahaRoute from "./routes/Datanasabah/Datadiri/Datausaha/DatausahaRoute.js";
+import DatajaminanRoute from "./routes/Datanasabah/Datadiri/Datajaminan/DatajaminanRoute.js";
+import DatapermohonanRoute from "./routes/Datanasabah/Datadiri/Datapermohonan/DatapermohonanRoute.js";
+import DatainstansiRoute from "./routes/Datanasabah/Datadiri/Datainstansi/DatainstansiRoute.js";
+import AnalisisRoute from "./routes/Datanasabah/Analisis/AnalisisRoute.js";
+import migrateNoPermohonanPrimaryKey from "./utils/migrateNoPermohonanPrimaryKey.js";
+import migrateOcrKtpNullable from "./utils/migrateOcrKtpNullable.js";
+import migrateUserCabangKantor from "./utils/migrateUserCabangKantor.js";
+import migrateDataPermohonanColumns from "./utils/migrateDataPermohonanColumns.js";
+import migrateOcrKtpDropUserFK from "./utils/migrateOcrKtpDropUserFK.js";
+import migrateUserSessionId from "./utils/migrateUserSessionId.js";
 
 import { verifyToken, verifyUser } from "./middleware/verify.js";
 
 dotenv.config();
 
 const app = express();
-app.use(express.static("upload"));
 
 app.use(
   cors({
     credentials: true,
-    origin: ["http://10.20.20.122:5173"],
-    // origin: true,
+    // origin: ["http://10.20.20.123:5173"],
+    origin: true,
   })
 );
 
@@ -47,21 +56,36 @@ app.use(express.json());
 
 // 4. Sync database
 (async () => {
-  await db.sync();
+  await migrateNoPermohonanPrimaryKey();
+  await migrateOcrKtpNullable();
+  await migrateOcrKtpDropUserFK();
+  await migrateUserCabangKantor();
+  await migrateUserSessionId();
+  await migrateDataPermohonanColumns();
+  await db.sync({ alter: { drop: false } });
 })();
 
 // 5. Define unprotected routes
 app.use(AuthRoute);
 app.use(TokenRoute);
 
+// 🔹 Mendapatkan __dirname di ES Module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 
 // 6. Define protected routes
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use(verifyToken, verifyUser, UserRoute);
+app.use(verifyToken, verifyUser, PermohonanRoute);
 app.use(verifyToken, verifyUser, DashboardNasabahRoute)
 app.use(verifyToken, verifyUser, ocrKTPRoute);
 app.use(verifyToken, verifyUser, DatadiriRoute);
 app.use(verifyToken, verifyUser, DatausahaRoute);
 app.use(verifyToken, verifyUser, DatajaminanRoute);
+app.use(verifyToken, verifyUser, DatapermohonanRoute);
+app.use(verifyToken, verifyUser, DatainstansiRoute);
+app.use(verifyToken, verifyUser, AnalisisRoute);
 
 const PORT = process.env.PORT;
 app.listen(PORT, () => {

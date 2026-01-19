@@ -19,15 +19,25 @@ const storage = multer.diskStorage({
   },
 });
 
-// Filter hanya gambar
+// Filter hanya gambar atau TXT untuk SLIK
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = [".jpg", ".jpeg", ".png"];
+  const imageTypes = [".jpg", ".jpeg", ".png"];
+  const textTypes = [".txt"];
   const ext = path.extname(file.originalname).toLowerCase();
-  if (allowedTypes.includes(ext)) {
-    cb(null, true);
-  } else {
-    cb(new Error("Hanya file gambar (.jpg, .jpeg, .png) yang diperbolehkan"), false);
+  if (file.fieldname === "slik") {
+    if (textTypes.includes(ext)) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error("Hanya file TXT (.txt) yang diperbolehkan untuk SLIK"), false);
+    return;
   }
+
+  if (imageTypes.includes(ext)) {
+    cb(null, true);
+    return;
+  }
+  cb(new Error("Hanya file gambar (.jpg, .jpeg, .png) yang diperbolehkan"), false);
 };
 
 const upload = multer({

@@ -1,4 +1,4 @@
-import Users from "../models/UserModel.js";
+import Users from "../models/UserModel/UserModel.js";
 // import Pasiens from "../models/pasien/PasienModel.js";
 // import Pegawais from "../models/pegawai/PegawaiModel.js";
 import jwt from "jsonwebtoken";
@@ -19,6 +19,10 @@ export const verifyUser = async (req, res, next) => {
       return res
         .status(404)
         .json({ msg: "User not found during verification" });
+    }
+
+    if (!req.sessionId || !user.sessionId || user.sessionId !== req.sessionId) {
+      return res.status(401).json({ msg: "Session expired, please login again" });
     }
 
     req.userDbKdpegawai = user.kdpegawai;
@@ -45,10 +49,11 @@ export const verifyToken = (req, res, next) => {
 
     req.userKdpegawai = decoded.kdpegawai;
     req.username = decoded.username;
+    req.kdkantor = decoded.kdkantor;
     req.role = decoded.role;
+    req.sessionId = decoded.sessionId;
     
     next();
   });
 };
-
 
