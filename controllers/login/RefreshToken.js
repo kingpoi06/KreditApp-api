@@ -1,16 +1,8 @@
 import Users from "../../models/UserModel/UserModel.js";
 import jwt from "jsonwebtoken";
-import { decrypt } from "../../middleware/cryptoUtils.js";
-
-const secretKey = process.env.CRYPTO_SECRET_KEY;
 
 export const refreshToken = async (req, res) => {
   try {
-    if (!secretKey) {
-      console.error("CRYPTO_SECRET_KEY is not configured");
-      return res.status(500).json({ msg: "Konfigurasi enkripsi tidak tersedia" });
-    }
-
     const refreshToken = req.cookies.refreshToken;
 
     if (!refreshToken) {
@@ -42,16 +34,7 @@ export const refreshToken = async (req, res) => {
       return res.sendStatus(403);
     }
 
-    let storedRefreshToken = user.jwt_token;
-    if (storedRefreshToken && storedRefreshToken.includes(":")) {
-      try {
-        storedRefreshToken = decrypt(storedRefreshToken, secretKey);
-      } catch (decryptError) {
-        console.error("Failed to decrypt stored refreshToken:", decryptError);
-        return res.sendStatus(403);
-      }
-    }
-
+    const storedRefreshToken = user.jwt_token;
     if (storedRefreshToken !== refreshToken) {
       return res.sendStatus(403);
     }

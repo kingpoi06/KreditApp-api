@@ -29,7 +29,7 @@ const normalizePayload = (body) => ({
   pangkatGolongan: body.pangkatGolongan,
   statusPegawai: body.statusPegawai,
   nipNik: body.nipNik ?? body.nipNIK ?? body.nip ?? body.nik,
-  npwp: body.npwp,
+  npwp: body.npwp ?? body.npwpInstansi ?? body.npwp_instansi,
   bekerjaSejak: body.bekerjaSejak ?? body.bekerja_sejak,
 });
 

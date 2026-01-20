@@ -20,6 +20,8 @@ import DatajaminanRoute from "./routes/Datanasabah/Datadiri/Datajaminan/Datajami
 import DatapermohonanRoute from "./routes/Datanasabah/Datadiri/Datapermohonan/DatapermohonanRoute.js";
 import DatainstansiRoute from "./routes/Datanasabah/Datadiri/Datainstansi/DatainstansiRoute.js";
 import AnalisisRoute from "./routes/Datanasabah/Analisis/AnalisisRoute.js";
+import CabangkantorRoute from "./routes/CabangkantorRoute.js";
+import PegawaiRoute from "./routes/PegawaiRoute.js";
 import migrateNoPermohonanPrimaryKey from "./utils/migrateNoPermohonanPrimaryKey.js";
 import migrateOcrKtpNullable from "./utils/migrateOcrKtpNullable.js";
 import migrateUserCabangKantor from "./utils/migrateUserCabangKantor.js";
@@ -86,6 +88,8 @@ app.use(verifyToken, verifyUser, DatajaminanRoute);
 app.use(verifyToken, verifyUser, DatapermohonanRoute);
 app.use(verifyToken, verifyUser, DatainstansiRoute);
 app.use(verifyToken, verifyUser, AnalisisRoute);
+app.use(verifyToken, verifyUser, CabangkantorRoute);
+app.use(verifyToken, verifyUser, PegawaiRoute);
 
 const PORT = process.env.PORT;
 app.listen(PORT, () => {

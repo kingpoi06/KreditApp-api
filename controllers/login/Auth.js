@@ -1,10 +1,7 @@
 import Users from "../../models/UserModel/UserModel.js";
 import jwt from "jsonwebtoken";
 import argon2 from "argon2";
-import { decrypt, encrypt } from "../../middleware/cryptoUtils.js";
 import crypto from "crypto";
-
-const secretKey = process.env.CRYPTO_SECRET_KEY;
 
 export const postLogin = async (req, res) => {
   console.log("postLogin called");
@@ -28,11 +25,6 @@ export const postLogin = async (req, res) => {
         .json({ msg: "Password Salah. Silahkan Masukan Lagi!" });
     }
 
-    if (!secretKey) {
-      console.error("CRYPTO_SECRET_KEY is not configured");
-      return res.status(500).json({ msg: "Konfigurasi enkripsi tidak tersedia" });
-    }
-
     const { kdpegawai, username, namalengkap, jabatan, kdkantor, email, role } =
       user;
 
@@ -50,11 +42,9 @@ export const postLogin = async (req, res) => {
       { expiresIn: "28000s" }
     );
 
-    const encryptedRefreshToken = encrypt(refreshToken, secretKey);
-
     // Update jwt_token di database
     await Users.update(
-      { jwt_token: encryptedRefreshToken, sessionId },
+      { jwt_token: refreshToken, sessionId },
       {
         where: { kdpegawai: user.kdpegawai },
       }
@@ -80,11 +70,6 @@ export const postLogin = async (req, res) => {
 
 export const deleteLogout = async (req, res) => {
   try {
-   if (!secretKey) {
-     console.error("CRYPTO_SECRET_KEY is not configured");
-     return res.status(500).json({ msg: "Konfigurasi enkripsi tidak tersedia" });
-   }
-
    const refreshToken = req.cookies.refreshToken; // ✅ Ambil token dari cookie
    console.log("Attempting logout, received refreshToken:", refreshToken);
 
@@ -125,16 +110,7 @@ export const deleteLogout = async (req, res) => {
      return res.sendStatus(403);
    }
 
-   let storedRefreshToken = user.jwt_token;
-   if (storedRefreshToken && storedRefreshToken.includes(":")) {
-     try {
-       storedRefreshToken = decrypt(storedRefreshToken, secretKey);
-     } catch (decryptError) {
-       console.error("Failed to decrypt stored refreshToken:", decryptError);
-       return res.sendStatus(403);
-     }
-   }
-
+   const storedRefreshToken = user.jwt_token;
    if (storedRefreshToken !== refreshToken) {
      console.log("RefreshToken mismatch during logout.");
      return res.sendStatus(403);

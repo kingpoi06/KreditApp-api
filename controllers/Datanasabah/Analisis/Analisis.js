@@ -1,6 +1,100 @@
 import Datadiri from "../../../models/Datanasabah/Datadiri/DatadiriModel.js";
+import { Op, fn, col, where } from "sequelize";
 import Analisis from "../../../models/Datanasabah/Analisis/AnalisisModel.js";
+import Users from "../../../models/UserModel/UserModel.js";
 import db from "../../../config/Database.js";
+import { sendWhatsAppBulk } from "../../../utils/whatsappNotifier.js";
+
+const getWitaHour = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Makassar",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hourPart = parts.find((part) => part.type === "hour");
+  if (!hourPart) return date.getUTCHours();
+  const parsed = Number(hourPart.value);
+  return Number.isFinite(parsed) ? parsed : date.getUTCHours();
+};
+
+const resolveGreeting = (date = new Date()) => {
+  const hour = getWitaHour(date);
+  if (hour >= 1 && hour <= 10) return "Pagi";
+  if (hour >= 11 && hour <= 15) return "Siang";
+  if (hour >= 16 && hour <= 18) return "Sore";
+  return "Malam";
+};
+
+const buildAnalisisNotificationPayload = ({
+  officerName,
+  jenisKredit,
+}) => {
+  const greeting = resolveGreeting();
+  const cleanJenisKredit = jenisKredit || "-";
+  return {
+    message: `Selamat ${greeting}, Pengusul Atas Nama ${officerName} yang telah menambahkan Data Analisis 5C telah Masuk berupa jenis Kredit ${cleanJenisKredit}. Terima Kasih`,
+    templateParams: [greeting, officerName, cleanJenisKredit],
+  };
+};
+
+const resolveOfficerContext = async (req) => {
+  const normalizedRole = String(req.role || "").toLowerCase();
+  if (normalizedRole !== "officer") return null;
+
+  const officer = await Users.findByPk(req.userKdpegawai, {
+    attributes: ["namalengkap", "kdpegawai", "kdkantor"],
+  });
+  const officerName = officer?.namalengkap || req.username || req.userKdpegawai;
+  const kodeKantor = officer?.kdkantor || req.kdkantor;
+
+  return {
+    officerName,
+    kodeKantor,
+  };
+};
+
+const notifyKomiteCabang = async ({
+  kodeKantor,
+  officerName,
+  jenisKredit,
+}) => {
+  if (!kodeKantor) {
+    return { skipped: true, reason: "kode_kantor tidak tersedia" };
+  }
+
+  const komiteList = await Users.findAll({
+    where: {
+      kdkantor: kodeKantor,
+      [Op.and]: [where(fn("lower", col("role")), "komitecabang")],
+    },
+    attributes: ["telpKantor", "kdpegawai", "namalengkap"],
+  });
+
+  const recipients = [
+    ...new Set(
+      komiteList
+        .map((item) => item.telpKantor)
+        .filter((value) => value && String(value).trim() !== "")
+    ),
+  ];
+
+  if (!recipients.length) {
+    return { skipped: true, reason: "telpKantor komitecabang kosong" };
+  }
+
+  const notification = buildAnalisisNotificationPayload({
+    officerName,
+    jenisKredit,
+  });
+
+  const result = await sendWhatsAppBulk(recipients, notification.message, {
+    templateParams: notification.templateParams,
+  });
+  return {
+    ...result,
+    jumlahPenerima: recipients.length,
+  };
+};
 
 const normalizePayload = (body) => ({
   jenisKredit: body.jenisKredit,
@@ -14,6 +108,16 @@ const normalizePayload = (body) => ({
   caraAngsuranKredit: body.caraAngsuranKredit,
   keteranganUmum: body.keteranganUmum,
   character: body.character,
+  jenisNasabah: body.jenisNasabah,
+  tunggakanKewajibanRutinNonKredit: body.tunggakanKewajibanRutinNonKredit,
+  danaDaruratCalonDebitur: body.danaDaruratCalonDebitur,
+  konsistensiSaldoRekening: body.konsistensiSaldoRekening,
+  cadanganKasOperasionalUsaha: body.cadanganKasOperasionalUsaha,
+  rekeningKhususOperasionalUsaha: body.rekeningKhususOperasionalUsaha,
+  risikoPHKPekerjaan: body.risikoPHKPekerjaan,
+  penghasilanAlternatifBerkelanjutan: body.penghasilanAlternatifBerkelanjutan,
+  stabilitasOmzetUsaha: body.stabilitasOmzetUsaha,
+  ketergantunganPelangganUtama: body.ketergantunganPelangganUtama,
   statusKepemilikanTempatTinggal: body.statusKepemilikanTempatTinggal,
   lamaTinggalAlamatSaatIni: body.lamaTinggalAlamatSaatIni,
   frekuensiPindahRumah: body.frekuensiPindahRumah,
@@ -180,11 +284,47 @@ export const createAnalisis = async (req, res) => {
       await Analisis.update(updateFields, {
         where: { no_permohonan: noPermohonan },
       });
-      return res.status(200).json({ msg: "Data Analisis 5C berhasil diperbarui!" });
+
+      let notif = null;
+      const officerContext = await resolveOfficerContext(req);
+      if (officerContext) {
+        try {
+          notif = await notifyKomiteCabang({
+            kodeKantor: officerContext.kodeKantor,
+            officerName: officerContext.officerName,
+            jenisKredit: updateFields.jenisKredit || existing.jenisKredit,
+          });
+        } catch (notifError) {
+          notif = { error: notifError?.message || "Gagal kirim notif" };
+        }
+      }
+
+      return res.status(200).json({
+        msg: "Data Analisis 5C berhasil diperbarui!",
+        notif,
+      });
     }
 
     await Analisis.create(payload);
-    res.status(201).json({ msg: "Data Analisis 5C berhasil ditambahkan!" });
+
+    let notif = null;
+    const officerContext = await resolveOfficerContext(req);
+    if (officerContext) {
+      try {
+        notif = await notifyKomiteCabang({
+          kodeKantor: officerContext.kodeKantor,
+          officerName: officerContext.officerName,
+          jenisKredit: payload.jenisKredit,
+        });
+      } catch (notifError) {
+        notif = { error: notifError?.message || "Gagal kirim notif" };
+      }
+    }
+
+    res.status(201).json({
+      msg: "Data Analisis 5C berhasil ditambahkan!",
+      notif,
+    });
   } catch (error) {
     console.error("Error creating Analisis:", error);
     res.status(500).json({ msg: error.message });
@@ -214,7 +354,24 @@ export const updateAnalisis = async (req, res) => {
       where: filter.where,
     });
 
-    res.status(200).json({ msg: "Data Analisis berhasil diperbarui!" });
+    let notif = null;
+    const officerContext = await resolveOfficerContext(req);
+    if (officerContext) {
+      try {
+        notif = await notifyKomiteCabang({
+          kodeKantor: officerContext.kodeKantor,
+          officerName: officerContext.officerName,
+          jenisKredit: updateFields.jenisKredit || analisis.jenisKredit,
+        });
+      } catch (notifError) {
+        notif = { error: notifError?.message || "Gagal kirim notif" };
+      }
+    }
+
+    res.status(200).json({
+      msg: "Data Analisis berhasil diperbarui!",
+      notif,
+    });
   } catch (error) {
     console.error("Error saat update data analisis:", error);
     res.status(500).json({ msg: "Terjadi kesalahan server" });

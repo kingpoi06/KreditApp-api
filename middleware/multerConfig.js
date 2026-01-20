@@ -19,10 +19,11 @@ const storage = multer.diskStorage({
   },
 });
 
-// Filter hanya gambar atau TXT untuk SLIK
+// Filter hanya gambar atau TXT untuk SLIK (tambahan PDF untuk dokumen instansi)
 const fileFilter = (req, file, cb) => {
   const imageTypes = [".jpg", ".jpeg", ".png"];
   const textTypes = [".txt"];
+  const documentTypes = [".pdf"];
   const ext = path.extname(file.originalname).toLowerCase();
   if (file.fieldname === "slik") {
     if (textTypes.includes(ext)) {
@@ -30,6 +31,20 @@ const fileFilter = (req, file, cb) => {
       return;
     }
     cb(new Error("Hanya file TXT (.txt) yang diperbolehkan untuk SLIK"), false);
+    return;
+  }
+
+  if (file.fieldname === "uploadNPWP" || file.fieldname === "uploadSKTerakhir") {
+    if (imageTypes.includes(ext) || documentTypes.includes(ext)) {
+      cb(null, true);
+      return;
+    }
+    cb(
+      new Error(
+        "Hanya file gambar (.jpg, .jpeg, .png) atau PDF (.pdf) yang diperbolehkan"
+      ),
+      false
+    );
     return;
   }
 

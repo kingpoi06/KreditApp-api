@@ -1,71 +1,6 @@
 import Datadiri from "../../../../models/Datanasabah/Datadiri/DatadiriModel.js";
 import Datausaha from "../../../../models/Datanasabah/Datadiri/Datausaha/DatausahaModel.js";
 import db from "../../../../config/Database.js";
-import { decrypt, encrypt } from "../../../../middleware/cryptoUtils.js";
-
-const secretKey = process.env.CRYPTO_SECRET_KEY;
-const datausahaAttributes = Datausaha.rawAttributes || {};
-const NON_ENCRYPTED_FIELDS = new Set([
-  "idDataUsahaNasabah",
-  "no_permohonan",
-  "createdAt",
-  "updatedAt",
-]);
-const ENCRYPTION_PATTERN = /^[0-9a-f]{32}:[0-9a-f]+$/i;
-const NON_ENCRYPTED_TYPE_KEYS = new Set(["INTEGER", "DATE", "DATEONLY"]);
-
-const hasDatausahaAttribute = (field) =>
-  Object.prototype.hasOwnProperty.call(datausahaAttributes, field);
-const isNonEncryptedType = (field) =>
-  NON_ENCRYPTED_TYPE_KEYS.has(datausahaAttributes[field]?.type?.key);
-const isEncryptableField = (field) =>
-  hasDatausahaAttribute(field) &&
-  !NON_ENCRYPTED_FIELDS.has(field) &&
-  !isNonEncryptedType(field);
-
-const ensureSecretKey = (res) => {
-  if (!secretKey) {
-    console.error("CRYPTO_SECRET_KEY is not configured");
-    res.status(500).json({ msg: "Konfigurasi enkripsi tidak tersedia" });
-    return false;
-  }
-  return true;
-};
-
-const encryptValue = (value) => {
-  if (value === undefined || value === null) return value;
-  if (typeof value === "string" && ENCRYPTION_PATTERN.test(value)) return value;
-  return encrypt(String(value), secretKey);
-};
-
-const decryptValue = (value) => {
-  if (value === undefined || value === null) return value;
-  if (typeof value !== "string" || !ENCRYPTION_PATTERN.test(value)) return value;
-  try {
-    return decrypt(value, secretKey);
-  } catch (error) {
-    console.error("Failed to decrypt data usaha field:", error);
-    return value;
-  }
-};
-
-const encryptPayload = (payload) => {
-  const result = { ...payload };
-  Object.keys(result).forEach((field) => {
-    if (!isEncryptableField(field)) return;
-    result[field] = encryptValue(result[field]);
-  });
-  return result;
-};
-
-const decryptPayload = (payload) => {
-  const result = { ...payload };
-  Object.keys(result).forEach((field) => {
-    if (!isEncryptableField(field)) return;
-    result[field] = decryptValue(result[field]);
-  });
-  return result;
-};
 
 const normalizeDataUsaha = (record) => {
   const plain = record?.get ? record.get({ plain: true }) : record;
@@ -117,10 +52,6 @@ const toNumber = (value) => {
 
 export const getDataUsaha = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     let response;
     if (["superadmin", "officer", "ketuacabang", "komitecabang"].includes(req.role)) {
       response = await Datausaha.findAll();
@@ -130,7 +61,7 @@ export const getDataUsaha = async (req, res) => {
     res.status(200).json({
       message: "Data Usaha Nasabah",
       Data: [response.map((item) =>
-        normalizeDataUsaha(decryptPayload(item.get({ plain: true })))
+        normalizeDataUsaha(item.get({ plain: true }))
       )],
     });
   } catch (error) {
@@ -140,10 +71,6 @@ export const getDataUsaha = async (req, res) => {
 
 export const getDatausahaByID = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     const noPermohonan =
       req.params.no_permohonan || req.params.idDataUsahaNasabah || req.params.uuid;
     const usaha = await Datausaha.findOne({
@@ -164,7 +91,7 @@ export const getDatausahaByID = async (req, res) => {
     }
     res.status(200).json({
       message: `Data NASABAH Dengan No Permohonan ${noPermohonan}`,
-      Data: [normalizeDataUsaha(decryptPayload(response.get({ plain: true })))],
+      Data: [normalizeDataUsaha(response.get({ plain: true }))],
     });
   } catch (error) {
     res.status(500).json({ msg: error.message });
@@ -207,10 +134,6 @@ export const createDataUsaha = async (req, res) => {
   } = req.body;
 
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     const noPermohonan = await resolveNoPermohonan(req.body);
     if (!noPermohonan) {
       return res.status(400).json({ msg: "No permohonan tidak ditemukan!" });
@@ -285,7 +208,7 @@ export const createDataUsaha = async (req, res) => {
       no_permohonan: noPermohonan,
     };
 
-    await Datausaha.create(encryptPayload(payload));
+    await Datausaha.create(payload);
     res.status(201).json({ msg: "Data Usaha Nasabah Berhasil Ditambahkan!" });
   } catch (error) {
     console.error("Error creating Data Usaha:", error);
@@ -295,10 +218,6 @@ export const createDataUsaha = async (req, res) => {
 
 export const updateDataUsaha = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     const noPermohonan =
       req.params.no_permohonan || req.params.idDataUsahaNasabah || req.params.uuid;
     if (!noPermohonan) return res.status(400).json({ msg: "Parameter No Permohonan tidak ditemukan!" });
@@ -306,7 +225,7 @@ export const updateDataUsaha = async (req, res) => {
     const datausaha = await Datausaha.findOne({ where: { no_permohonan: noPermohonan } });
     if (!datausaha) return res.status(404).json({ msg: "Data Usaha tidak ditemukan!" });
 
-    const plainDatausaha = decryptPayload(datausaha.get({ plain: true }));
+    const plainDatausaha = datausaha.get({ plain: true });
 
     const updateFields = {
       namaUsaha: req.body.namaUsaha,
@@ -349,8 +268,7 @@ export const updateDataUsaha = async (req, res) => {
       return res.status(403).json({ msg: "Akses ditolak!" });
     }
 
-    const encryptedUpdateFields = encryptPayload(updateFields);
-    await Datausaha.update(encryptedUpdateFields, { where: { no_permohonan: noPermohonan } });
+    await Datausaha.update(updateFields, { where: { no_permohonan: noPermohonan } });
 
     res.status(200).json({ msg: "Data Usaha Nasabah Berhasil Di Perbaharui!" });
   } catch (error) {

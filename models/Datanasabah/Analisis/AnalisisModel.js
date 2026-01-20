@@ -70,6 +70,46 @@ const Analisis = db.define(
       type: DataTypes.TEXT("long"),
       allowNull: true,
     },
+    jenisNasabah: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    tunggakanKewajibanRutinNonKredit: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    danaDaruratCalonDebitur: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    konsistensiSaldoRekening: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    cadanganKasOperasionalUsaha: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    rekeningKhususOperasionalUsaha: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    risikoPHKPekerjaan: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    penghasilanAlternatifBerkelanjutan: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    stabilitasOmzetUsaha: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    ketergantunganPelangganUtama: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
     statusKepemilikanTempatTinggal: {
       type: DataTypes.TEXT,
       allowNull: true,

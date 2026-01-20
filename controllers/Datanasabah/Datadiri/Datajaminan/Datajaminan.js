@@ -3,71 +3,6 @@ import Datajaminan from "../../../../models/Datanasabah/Datadiri/Datajaminan/Dat
 import db from "../../../../config/Database.js";
 import fs from "fs/promises";
 import path from "path";
-import { decrypt, encrypt } from "../../../../middleware/cryptoUtils.js";
-
-const secretKey = process.env.CRYPTO_SECRET_KEY;
-const datajaminanAttributes = Datajaminan.rawAttributes || {};
-const NON_ENCRYPTED_FIELDS = new Set([
-  "idDataJaminan",
-  "no_permohonan",
-  "createdAt",
-  "updatedAt",
-]);
-const ENCRYPTION_PATTERN = /^[0-9a-f]{32}:[0-9a-f]+$/i;
-const NON_ENCRYPTED_TYPE_KEYS = new Set(["INTEGER", "DATE", "DATEONLY"]);
-
-const hasDatajaminanAttribute = (field) =>
-  Object.prototype.hasOwnProperty.call(datajaminanAttributes, field);
-const isNonEncryptedType = (field) =>
-  NON_ENCRYPTED_TYPE_KEYS.has(datajaminanAttributes[field]?.type?.key);
-const isEncryptableField = (field) =>
-  hasDatajaminanAttribute(field) &&
-  !NON_ENCRYPTED_FIELDS.has(field) &&
-  !isNonEncryptedType(field);
-
-const ensureSecretKey = (res) => {
-  if (!secretKey) {
-    console.error("CRYPTO_SECRET_KEY is not configured");
-    res.status(500).json({ msg: "Konfigurasi enkripsi tidak tersedia" });
-    return false;
-  }
-  return true;
-};
-
-const encryptValue = (value) => {
-  if (value === undefined || value === null) return value;
-  if (typeof value === "string" && ENCRYPTION_PATTERN.test(value)) return value;
-  return encrypt(String(value), secretKey);
-};
-
-const decryptValue = (value) => {
-  if (value === undefined || value === null) return value;
-  if (typeof value !== "string" || !ENCRYPTION_PATTERN.test(value)) return value;
-  try {
-    return decrypt(value, secretKey);
-  } catch (error) {
-    console.error("Failed to decrypt data jaminan field:", error);
-    return value;
-  }
-};
-
-const encryptPayload = (payload) => {
-  const result = { ...payload };
-  Object.keys(result).forEach((field) => {
-    if (!isEncryptableField(field)) return;
-    result[field] = encryptValue(result[field]);
-  });
-  return result;
-};
-
-const decryptPayload = (payload) => {
-  const result = { ...payload };
-  Object.keys(result).forEach((field) => {
-    if (!isEncryptableField(field)) return;
-    result[field] = decryptValue(result[field]);
-  });
-  return result;
-};
 
 const looksLikeTxtFileName = (value) =>
   typeof value === "string" && value.trim().toLowerCase().endsWith(".txt");
@@ -162,10 +97,6 @@ const resolveNoPermohonan = async (body) => {
 
 export const getDataJaminan = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     let response;
     if (req.role === "superadmin" || req.role === "officer" || req.role == "ketuacabang" || req.role === "komitecabang" ) {
       response = await Datajaminan.findAll();
@@ -175,7 +106,7 @@ export const getDataJaminan = async (req, res) => {
     res.status(200).json({
       message: "Data Jaminan Nasabah",
       Data: [response.map((item) =>
-        normalizeDataJaminan(decryptPayload(item.get({ plain: true })))
+        normalizeDataJaminan(item.get({ plain: true }))
       )],
     });
   } catch (error) {
@@ -185,10 +116,6 @@ export const getDataJaminan = async (req, res) => {
 
 export const getDataJaminanByUUID = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     const noPermohonan =
       req.params.no_permohonan || req.params.uuid || req.params.idDataJaminan;
     const jaminan = await Datajaminan.findOne({
@@ -209,7 +136,7 @@ export const getDataJaminanByUUID = async (req, res) => {
     }
     res.status(200).json({
       message: `Data NASABAH Dengan No Permohonan ${noPermohonan}`,
-      Data: [normalizeDataJaminan(decryptPayload(response.get({ plain: true })))],
+      Data: [normalizeDataJaminan(response.get({ plain: true }))],
     });
   } catch (error) {
     res.status(500).json({ msg: error.message });
@@ -275,10 +202,6 @@ export const createDataJaminan = async (req, res) => {
   } = req.body;
 
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     const noPermohonan = await resolveNoPermohonan(req.body);
     if (!noPermohonan) {
       return res.status(400).json({ msg: "No Permohonan wajib diisi!" });
@@ -364,7 +287,7 @@ export const createDataJaminan = async (req, res) => {
       no_permohonan: noPermohonan,
     };
 
-    await Datajaminan.create(encryptPayload(payload));
+    await Datajaminan.create(payload);
     res.status(201).json({ msg: "Data Jaminan Nasabah Berhasil Ditambahkan!" });
   } catch (error) {
     console.error("Error creating Data Jaminan:", error);
@@ -374,10 +297,6 @@ export const createDataJaminan = async (req, res) => {
 
 export const updateDataJaminan = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     const noPermohonan =
       req.params.no_permohonan || req.params.uuid || req.params.idDataJaminan;
     if (!noPermohonan) return res.status(400).json({ msg: "Parameter No Permohonan tidak ditemukan!" });
@@ -385,7 +304,7 @@ export const updateDataJaminan = async (req, res) => {
     const datajaminan = await Datajaminan.findOne({ where: { no_permohonan: noPermohonan } });
     if (!datajaminan) return res.status(404).json({ msg: "Data Jaminan tidak ditemukan!" });
 
-    const plainDatajaminan = decryptPayload(datajaminan.get({ plain: true }));
+    const plainDatajaminan = datajaminan.get({ plain: true });
 
     const {
       jenisjaminan,
@@ -529,8 +448,7 @@ export const updateDataJaminan = async (req, res) => {
     if (!["superadmin", "officer"].includes(req.role)) {
       return res.status(403).json({ msg: "Akses ditolak!" });
     }
-    const encryptedUpdateFields = encryptPayload(updateFields);
-    await Datajaminan.update(encryptedUpdateFields, { where: { no_permohonan: noPermohonan } });
+    await Datajaminan.update(updateFields, { where: { no_permohonan: noPermohonan } });
 
     res.status(200).json({ msg: "Data Jaminan Nasabah Berhasil Diperbaharui!" });
   } catch (error) {

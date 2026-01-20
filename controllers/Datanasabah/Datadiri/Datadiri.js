@@ -5,72 +5,6 @@ import DataPermohonan from "../../../models/Datanasabah/Datadiri/Datapermohonan/
 import Permohonan from "../../../models/Datanasabah/generateNoPermohonan/PermohonanModel.js";
 import Users from "../../../models/UserModel/UserModel.js";
 import db from "../../../config/Database.js";
-import { decrypt, encrypt } from "../../../middleware/cryptoUtils.js";
-
-const secretKey = process.env.CRYPTO_SECRET_KEY;
-const datadiriAttributes = Datadiri.rawAttributes || {};
-const NON_ENCRYPTED_FIELDS = new Set([
-  "nik",
-  "no_permohonan",
-  "kdpegawai",
-  "createdAt",
-  "updatedAt",
-]);
-const ENCRYPTION_PATTERN = /^[0-9a-f]{32}:[0-9a-f]+$/i;
-const NON_ENCRYPTED_TYPE_KEYS = new Set(["INTEGER", "DATE", "DATEONLY"]);
-
-const hasDatadiriAttribute = (field) =>
-  Object.prototype.hasOwnProperty.call(datadiriAttributes, field);
-const isNonEncryptedType = (field) =>
-  NON_ENCRYPTED_TYPE_KEYS.has(datadiriAttributes[field]?.type?.key);
-const isEncryptableField = (field) =>
-  hasDatadiriAttribute(field) &&
-  !NON_ENCRYPTED_FIELDS.has(field) &&
-  !isNonEncryptedType(field);
-
-const ensureSecretKey = (res) => {
-  if (!secretKey) {
-    console.error("CRYPTO_SECRET_KEY is not configured");
-    res.status(500).json({ msg: "Konfigurasi enkripsi tidak tersedia" });
-    return false;
-  }
-  return true;
-};
-
-const encryptValue = (value) => {
-  if (value === undefined || value === null) return value;
-  if (typeof value === "string" && ENCRYPTION_PATTERN.test(value)) return value;
-  return encrypt(String(value), secretKey);
-};
-
-const decryptValue = (value) => {
-  if (value === undefined || value === null) return value;
-  if (typeof value !== "string" || !ENCRYPTION_PATTERN.test(value)) return value;
-  try {
-    return decrypt(value, secretKey);
-  } catch (error) {
-    console.error("Failed to decrypt data diri field:", error);
-    return value;
-  }
-};
-
-const encryptPayload = (payload) => {
-  const result = { ...payload };
-  Object.keys(result).forEach((field) => {
-    if (!isEncryptableField(field)) return;
-    result[field] = encryptValue(result[field]);
-  });
-  return result;
-};
-
-const decryptPayload = (payload) => {
-  const result = { ...payload };
-  Object.keys(result).forEach((field) => {
-    if (!isEncryptableField(field)) return;
-    result[field] = decryptValue(result[field]);
-  });
-  return result;
-};
 
 const normalizeDatadiri = (record) => {
   const plain = record?.get ? record.get({ plain: true }) : record;
@@ -148,10 +82,6 @@ const resolveDatadiriWhere = (paramValue) => {
 
 export const getDatadiriAll = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     if (!["officer", "superadmin", "ketuacabang", "komitecabang"].includes(req.role)) {
       return res.status(403).json({ msg: "Akses ditolak" });
     }
@@ -183,7 +113,7 @@ export const getDatadiriAll = async (req, res) => {
     res.status(200).json({
       message: "Data nasabah sesuai kantor",
       Data: data.map((item) =>
-        normalizeDatadiri(decryptPayload(item.get({ plain: true })))
+        normalizeDatadiri(item.get({ plain: true }))
       ),
     });
   } catch (error) {
@@ -194,10 +124,6 @@ export const getDatadiriAll = async (req, res) => {
 
 export const getDataDiriByNIK = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     const paramValue = req.params.no_permohonan || req.params.nik;
     const where = resolveDatadiriWhere(paramValue);
     if (!where) {
@@ -240,7 +166,7 @@ export const getDataDiriByNIK = async (req, res) => {
 
     res.status(200).json({
       message: "Detail data nasabah",
-      Data: normalizeDatadiri(decryptPayload(datadiri.get({ plain: true }))),
+      Data: normalizeDatadiri(datadiri.get({ plain: true })),
     });
   } catch (error) {
     console.error("Error getDataDiriByNIK:", error);
@@ -251,10 +177,6 @@ export const getDataDiriByNIK = async (req, res) => {
 export const createDataDiri = async (req, res) => {
   
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     const {
       nik,
       namaLengkap,
@@ -349,7 +271,7 @@ export const createDataDiri = async (req, res) => {
       no_permohonan: noPermohonan,
     };
 
-    await Datadiri.create(encryptPayload(payload));
+    await Datadiri.create(payload);
 
     res.status(201).json({
       msg: "Data diri nasabah berhasil disimpan",
@@ -365,10 +287,6 @@ export const createDataDiri = async (req, res) => {
 
 export const updateDataDiriNasabah = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     const paramValue = req.params.no_permohonan || req.params.nik;
     const where = resolveDatadiriWhere(paramValue);
     if (!where) {
@@ -380,7 +298,7 @@ export const updateDataDiriNasabah = async (req, res) => {
       return res.status(404).json({ msg: "Data nasabah tidak ditemukan!" });
     }
 
-    const plainDatadiri = decryptPayload(datadiri.get({ plain: true }));
+    const plainDatadiri = datadiri.get({ plain: true });
 
     const fotoKTPFile = req.files?.fotoKTP
       ? req.files.fotoKTP[0].filename
@@ -445,8 +363,7 @@ if (
       return res.status(400).json({ msg: "Tidak ada data untuk diperbarui!" });
     }
 
-    const encryptedUpdateFields = encryptPayload(updateFields);
-    await Datadiri.update(encryptedUpdateFields, { where });
+    await Datadiri.update(updateFields, { where });
 
     res.status(200).json({ msg: "Data nasabah berhasil diperbarui!" });
   } catch (error) {

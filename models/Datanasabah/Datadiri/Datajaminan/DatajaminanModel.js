@@ -101,39 +101,39 @@ const Datajaminan = db.define(
       allowNull: true,
     },
     taksiranPasar: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     nilaiPPAP: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     nilaiNJOP: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     nilaiNJOPTanah: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     nilaiNJOPBangunan: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     nilaiTaksiranKelurahan: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     nilaiLikuidasiBank: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     jumlahNilaiDigunakan: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     plafonDiajukan: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     pengikatanJaminan: {
@@ -155,15 +155,15 @@ const Datajaminan = db.define(
       allowNull: true,
     },
     rerataNilaiPasar: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     safetyMargin: {
-      type: DataTypes.STRING(10),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     nilaiLikuidasi: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     noBPKB: {
@@ -219,15 +219,15 @@ const Datajaminan = db.define(
       allowNull: true,
     },
     nilaiPasarDeposit: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     bungaSimpanan: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     bungaTambahan: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
 
@@ -241,7 +241,7 @@ const Datajaminan = db.define(
       allowNull: true,
     },
     saldoTabunganDiblokirSebesarPlafon: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.INTEGER(150),
       allowNull: true,
     },
     noRekening: {

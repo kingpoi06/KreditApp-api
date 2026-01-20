@@ -1,80 +1,21 @@
 import Datadiri from "../../../../models/Datanasabah/Datadiri/DatadiriModel.js";
 import DataPermohonan from "../../../../models/Datanasabah/Datadiri/Datapermohonan/DataPermohonanModel.js";
 import db from "../../../../config/Database.js";
-import { decrypt, encrypt } from "../../../../middleware/cryptoUtils.js";
 
-const secretKey = process.env.CRYPTO_SECRET_KEY;
-const datapermohonanAttributes = DataPermohonan.rawAttributes || {};
-const NON_ENCRYPTED_FIELDS = new Set([
-  "idDataPermohonan",
-  "no_permohonan",
-  "createdAt",
-  "updatedAt",
-]);
-const ENCRYPTION_PATTERN = /^[0-9a-f]{32}:[0-9a-f]+$/i;
-const NON_ENCRYPTED_TYPE_KEYS = new Set(["INTEGER", "DATE", "DATEONLY"]);
-
-const hasDatapermohonanAttribute = (field) =>
-  Object.prototype.hasOwnProperty.call(datapermohonanAttributes, field);
-const isNonEncryptedType = (field) =>
-  NON_ENCRYPTED_TYPE_KEYS.has(datapermohonanAttributes[field]?.type?.key);
-const isEncryptableField = (field) =>
-  hasDatapermohonanAttribute(field) &&
-  !NON_ENCRYPTED_FIELDS.has(field) &&
-  !isNonEncryptedType(field);
-
-const ensureSecretKey = (res) => {
-  if (!secretKey) {
-    console.error("CRYPTO_SECRET_KEY is not configured");
-    res.status(500).json({ msg: "Konfigurasi enkripsi tidak tersedia" });
-    return false;
-  }
-  return true;
-};
-
-const encryptValue = (value) => {
-  if (value === undefined || value === null) return value;
-  if (typeof value === "string" && ENCRYPTION_PATTERN.test(value)) return value;
-  return encrypt(String(value), secretKey);
-};
-
-const decryptValue = (value) => {
-  if (value === undefined || value === null) return value;
-  if (typeof value !== "string" || !ENCRYPTION_PATTERN.test(value)) return value;
-  try {
-    return decrypt(value, secretKey);
-  } catch (error) {
-    console.error("Failed to decrypt data permohonan field:", error);
-    return value;
-  }
-};
-
-const encryptPayload = (payload) => {
-  const result = { ...payload };
-  Object.keys(result).forEach((field) => {
-    if (!isEncryptableField(field)) return;
-    result[field] = encryptValue(result[field]);
-  });
-  return result;
-};
-
-const decryptPayload = (payload) => {
-  const result = { ...payload };
-  Object.keys(result).forEach((field) => {
-    if (!isEncryptableField(field)) return;
-    result[field] = decryptValue(result[field]);
-  });
-  return result;
+const toNumber = (value) => {
+  if (value === "" || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 };
 
 const normalizePayload = (body) => ({
   jenisKredit: body.jenisKredit,
   tujuanPenggunaanKredit: body.tujuanPenggunaanKredit,
-  plafonPermohonan: body.plafonPermohonan,
-  jangkaWaktuKredit: body.jangkaWaktuKredit,
-  sukuBungaTahun: body.sukuBungaTahun,
-  sukuBungaBulan: body.sukuBungaBulan,
-  perhitunganBunga: body.perhitunganBunga,
+  plafonPermohonan: toNumber(body.plafonPermohonan),
+  jangkaWaktuKredit: toNumber(body.jangkaWaktuKredit),
+  sukuBungaTahun: toNumber(body.sukuBungaTahun),
+  sukuBungaBulan: toNumber(body.sukuBungaBulan),
+  perhitunganBunga: toNumber(body.perhitunganBunga),
   sumberPengembalian: body.sumberPengembalian,
   caraAngsuranKredit: body.caraAngsuranKredit,
   keteranganUmum: body.keteranganUmum,
@@ -108,17 +49,13 @@ const resolveNoPermohonan = async (body) => {
 
 export const getDatapermohonanALL = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     const response = await DataPermohonan.findAll({
       order: [["createdAt", "DESC"]],
     });
 
     res.status(200).json({
       message: "Data Permohonan Nasabah",
-      Data: response.map((item) => decryptPayload(item.get({ plain: true }))),
+      Data: response.map((item) => item.get({ plain: true })),
     });
   } catch (error) {
     res.status(500).json({ msg: error.message });
@@ -127,10 +64,6 @@ export const getDatapermohonanALL = async (req, res) => {
 
 export const getDataPermohonanByUUID = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     const { no_permohonan: noPermohonanParam } = req.params;
     const noPermohonan = noPermohonanParam || req.params.idDataPermohonan;
     const permohonan = await DataPermohonan.findOne({
@@ -143,7 +76,7 @@ export const getDataPermohonanByUUID = async (req, res) => {
 
     res.status(200).json({
       message: `Data permohonan dengan No Permohonan ${noPermohonan}`,
-      Data: decryptPayload(permohonan.get({ plain: true })),
+      Data: permohonan.get({ plain: true }),
     });
   } catch (error) {
     res.status(500).json({ msg: error.message });
@@ -152,10 +85,6 @@ export const getDataPermohonanByUUID = async (req, res) => {
 
 export const createDataPermohonan = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     const noPermohonan = await resolveNoPermohonan(req.body);
     if (!noPermohonan) {
       return res.status(400).json({ msg: "No permohonan tidak ditemukan!" });
@@ -166,7 +95,7 @@ export const createDataPermohonan = async (req, res) => {
       ...normalizePayload(req.body),
     });
 
-    await DataPermohonan.create(encryptPayload(payload));
+    await DataPermohonan.create(payload);
     res.status(201).json({ msg: "Data permohonan nasabah berhasil ditambahkan!" });
   } catch (error) {
     console.error("Error creating Data Permohonan:", error);
@@ -176,10 +105,6 @@ export const createDataPermohonan = async (req, res) => {
 
 export const updateDataPermohonan = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     const { no_permohonan: noPermohonanParam } = req.params;
     const noPermohonan = noPermohonanParam || req.params.idDataPermohonan;
     if (!noPermohonan) {
@@ -196,8 +121,7 @@ export const updateDataPermohonan = async (req, res) => {
       return res.status(400).json({ msg: "Tidak ada data untuk diperbarui!" });
     }
 
-    const encryptedUpdateFields = encryptPayload(updateFields);
-    await DataPermohonan.update(encryptedUpdateFields, { where: { no_permohonan: noPermohonan } });
+    await DataPermohonan.update(updateFields, { where: { no_permohonan: noPermohonan } });
 
     res.status(200).json({ msg: "Data permohonan nasabah berhasil diperbarui!" });
   } catch (error) {

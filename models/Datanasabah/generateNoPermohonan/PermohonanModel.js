@@ -60,7 +60,7 @@ const Permohonan = db.define(
       allowNull: true,
     },
     premi: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.INTEGER(100),
       allowNull: true,
       validate: {
         isInt: true,
@@ -71,7 +71,7 @@ const Permohonan = db.define(
       allowNull: true,
     },
     biayaAPHT: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.INTEGER(100),
       allowNull: true,
       validate: {
         isInt: true,

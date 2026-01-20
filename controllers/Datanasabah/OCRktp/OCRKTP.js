@@ -4,83 +4,10 @@ import { scanKTP } from "../../../utils/ktpOcr.js";
 import path from "path";
 import fs from "fs/promises";
 import sharp from "sharp";
-import { decrypt, encrypt } from "../../../middleware/cryptoUtils.js";
 
 const KTP_TARGET_WIDTH = 1500;
 const KTP_TARGET_HEIGHT = 1000;
 
-const secretKey = process.env.CRYPTO_SECRET_KEY;
-const ocrAttributes = ocrKTP.rawAttributes || {};
-const NON_ENCRYPTED_FIELDS = new Set([
-  "idOCR",
-  "nikKTP",
-  "kdpegawai",
-  "createdAt",
-  "updatedAt",
-]);
-const ENCRYPTION_PATTERN = /^[0-9a-f]{32}:[0-9a-f]+$/i;
-const NON_ENCRYPTED_TYPE_KEYS = new Set([
-  "INTEGER",
-  "DATE",
-  "DATEONLY",
-  "FLOAT",
-  "DOUBLE",
-  "DECIMAL",
-  "UUID",
-  "BOOLEAN",
-]);
-
-const hasOcrAttribute = (field) =>
-  Object.prototype.hasOwnProperty.call(ocrAttributes, field);
-const isNonEncryptedType = (field) =>
-  NON_ENCRYPTED_TYPE_KEYS.has(ocrAttributes[field]?.type?.key);
-const isEncryptableField = (field) =>
-  hasOcrAttribute(field) &&
-  !NON_ENCRYPTED_FIELDS.has(field) &&
-  !isNonEncryptedType(field);
-
-const ensureSecretKey = (res) => {
-  if (!secretKey) {
-    console.error("CRYPTO_SECRET_KEY is not configured");
-    res.status(500).json({ msg: "Konfigurasi enkripsi tidak tersedia" });
-    return false;
-  }
-  return true;
-};
-
-const encryptValue = (value) => {
-  if (value === undefined || value === null) return value;
-  return encrypt(String(value), secretKey);
-};
-
-const decryptValue = (value) => {
-  if (value === undefined || value === null) return value;
-  if (typeof value !== "string" || !ENCRYPTION_PATTERN.test(value)) return value;
-  try {
-    return decrypt(value, secretKey);
-  } catch (error) {
-    console.error("Failed to decrypt OCR KTP field:", error);
-    return value;
-  }
-};
-
-const encryptPayload = (payload) => {
-  const result = { ...payload };
-  Object.keys(result).forEach((field) => {
-    if (!isEncryptableField(field)) return;
-    result[field] = encryptValue(result[field]);
-  });
-  return result;
-};
-
-const decryptPayload = (payload) => {
-  const result = { ...payload };
-  Object.keys(result).forEach((field) => {
-    if (!isEncryptableField(field)) return;
-    result[field] = decryptValue(result[field]);
-  });
-  return result;
-};
 
 const resizeKtpIfNeeded = async (imageBuffer) => {
   const metadata = await sharp(imageBuffer).metadata();
@@ -114,11 +41,6 @@ const normalizeDate = (tgl) => {
 export const scanAndSaveOCRKTP = async (req, res) => {
   const t = await db.transaction();
   try {
-    if (!ensureSecretKey(res)) {
-      await t.rollback();
-      return;
-    }
-
     if (!req.files?.fotoKTP) {
       return res.status(400).json({ msg: "Foto KTP wajib diupload" });
     }
@@ -177,7 +99,7 @@ export const scanAndSaveOCRKTP = async (req, res) => {
     // Cek apakah NIK sudah ada, jika tidak ada buat baru
     const [savedOCR, created] = await ocrKTP.findOrCreate({
       where: { nikKTP: rawOcr.nikKTP },
-      defaults: encryptPayload({
+      defaults: {
         namaLengkap: rawOcr.namaLengkap ?? null,
         tempatLahir: rawOcr.tempatLahir ?? null,
         tanggalLahir: tanggalLahirFix,
@@ -197,7 +119,7 @@ export const scanAndSaveOCRKTP = async (req, res) => {
         rawJson: JSON.stringify(rawOcr),
         fotoKTP: fotoKTPFile,
         kdpegawai: req.userKdpegawai,
-      }),
+      },
       transaction: t,
     });
 
@@ -210,7 +132,7 @@ export const scanAndSaveOCRKTP = async (req, res) => {
     if (!created) {
       const responsePayload = {
         msg: "NIK sudah ada, data tidak dibuat duplikat",
-        Data: decryptPayload(savedOCR.get({ plain: true })),
+        Data: savedOCR.get({ plain: true }),
       };
       if (warning) responsePayload.warning = warning;
       return res.status(200).json(responsePayload);
@@ -218,7 +140,7 @@ export const scanAndSaveOCRKTP = async (req, res) => {
 
     const responsePayload = {
       msg: "Scan OCR KTP berhasil & data tersimpan",
-      Data: decryptPayload(savedOCR.get({ plain: true })),
+      Data: savedOCR.get({ plain: true }),
     };
     if (warning) responsePayload.warning = warning;
 
@@ -234,10 +156,6 @@ export const scanAndSaveOCRKTP = async (req, res) => {
 // Ambil semua data OCR
 export const getDataOCRAll = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     if (!["officer", "superadmin", "ketuacabang", "dirut"].includes(req.role)) {
       return res.status(403).json({ msg: "Anda tidak memiliki akses untuk melihat semua data nasabah" });
     }
@@ -246,7 +164,7 @@ export const getDataOCRAll = async (req, res) => {
 
     res.status(200).json({
       message: "Data semua nasabah",
-      Data: allData.map((item) => decryptPayload(item.get({ plain: true }))),
+      Data: allData.map((item) => item.get({ plain: true })),
     });
   } catch (error) {
     console.error("Error saat getDataOCRAll:", error);
@@ -257,10 +175,6 @@ export const getDataOCRAll = async (req, res) => {
 // Ambil data OCR by NIK
 export const getDataOCRByNIK = async (req, res) => {
   try {
-    if (!ensureSecretKey(res)) {
-      return;
-    }
-
     const nikKTP = req.params.nikKTP || req.params.nik;
     if (!nikKTP) return res.status(400).json({ msg: "Parameter NIK tidak ditemukan!" });
 
@@ -273,7 +187,7 @@ export const getDataOCRByNIK = async (req, res) => {
     if (["superadmin", "ketuacabang", "dirut", "officer"].includes(req.role) || req.nikKTP === nikKTP) {
       return res.status(200).json({
         message: `Data OCR KTP dengan NIK ${nikKTP}`,
-        Data: decryptPayload(ocrktp.get({ plain: true })),
+        Data: ocrktp.get({ plain: true }),
       });
     }
 
