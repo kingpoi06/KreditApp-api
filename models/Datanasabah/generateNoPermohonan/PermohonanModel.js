@@ -5,7 +5,7 @@ import Users from "../../UserModel/UserModel.js";
 const { DataTypes, Op } = Sequelize;
 
 const Permohonan = db.define(
-  "generate/no-permohonan",
+  "generate-no-permohonan",
   {
     //No Permohonan
     no_permohonan: {

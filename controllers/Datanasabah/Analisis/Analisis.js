@@ -1,6 +1,7 @@
 import Datadiri from "../../../models/Datanasabah/Datadiri/DatadiriModel.js";
 import { Op, fn, col, where } from "sequelize";
 import Analisis from "../../../models/Datanasabah/Analisis/AnalisisModel.js";
+import Permohonan from "../../../models/Datanasabah/generateNoPermohonan/PermohonanModel.js";
 import Users from "../../../models/UserModel/UserModel.js";
 import db from "../../../config/Database.js";
 import { sendWhatsAppBulk } from "../../../utils/whatsappNotifier.js";
@@ -129,8 +130,6 @@ const normalizePayload = (body) => ({
   statusLokasiUsaha: body.statusLokasiUsaha,
   ketergantunganTerhadapMusim: body.ketergantunganTerhadapMusim,
   statusAgunan: body.statusAgunan,
-  capital1: body.capital1,
-  capital2: body.capital2,
   capacity1: body.capacity1,
   capacity2: body.capacity2,
   capacity3: body.capacity3,
@@ -221,9 +220,50 @@ const resolveNoPermohonan = async (body) => {
   return noPermohonan;
 };
 
+const buildPermohonanAccessInclude = (req) => {
+  const role = String(req.role || "").toLowerCase();
+  const permohonanWhere = {};
+  const userWhere = {};
+
+  if (role === "officer") {
+    permohonanWhere.kdpegawai = req.userKdpegawai;
+  } else if (role === "komitecabang" || role === "ketuacabang" || role === "penyelia") {
+    if (req.kdkantor) {
+      userWhere.kdkantor = req.kdkantor;
+    }
+  }
+
+  if (!Object.keys(permohonanWhere).length && !Object.keys(userWhere).length) {
+    return [];
+  }
+
+  const includeUser = Object.keys(userWhere).length
+    ? [
+        {
+          model: Users,
+          attributes: [],
+          where: userWhere,
+          required: true,
+        },
+      ]
+    : [];
+
+  return [
+    {
+      model: Permohonan,
+      attributes: [],
+      ...(Object.keys(permohonanWhere).length ? { where: permohonanWhere } : {}),
+      required: true,
+      include: includeUser,
+    },
+  ];
+};
+
 export const getAnalisisAll = async (req, res) => {
   try {
+    const includeAccess = buildPermohonanAccessInclude(req);
     const response = await Analisis.findAll({
+      ...(includeAccess.length ? { include: includeAccess } : {}),
       order: [["createdAt", "DESC"]],
     });
     res.status(200).json({
@@ -242,8 +282,10 @@ export const getAnalisisByNoPermohonan = async (req, res) => {
       return res.status(400).json({ msg: "Parameter No Permohonan atau ID Data Analisis tidak ditemukan!" });
     }
 
+    const includeAccess = buildPermohonanAccessInclude(req);
     const analisis = await Analisis.findOne({
       where: filter.where,
+      ...(includeAccess.length ? { include: includeAccess } : {}),
     });
 
     if (!analisis) {

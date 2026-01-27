@@ -5,6 +5,8 @@ import DataPermohonan from "../../../models/Datanasabah/Datadiri/Datapermohonan/
 import Permohonan from "../../../models/Datanasabah/generateNoPermohonan/PermohonanModel.js";
 import Users from "../../../models/UserModel/UserModel.js";
 import db from "../../../config/Database.js";
+import fs from "fs/promises";
+import path from "path";
 
 const normalizeDatadiri = (record) => {
   const plain = record?.get ? record.get({ plain: true }) : record;
@@ -58,6 +60,143 @@ const normalizeDatadiri = (record) => {
   return normalized;
 };
 
+const looksLikeTxtFileName = (value) =>
+  typeof value === "string" && value.trim().toLowerCase().endsWith(".txt");
+
+const isTruthy = (value) => {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return ["1", "true", "yes", "y"].includes(normalized);
+};
+
+const hasMeaningfulValue = (value) => {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim() !== "";
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.some((item) => hasMeaningfulValue(item));
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return false;
+};
+
+const getBodyTextValue = (body, keys) => {
+  for (const key of keys) {
+    const value = body?.[key];
+    if (typeof value === "string" && value.trim() !== "") {
+      return value.trim();
+    }
+  }
+  return "";
+};
+
+const readSlikFileContent = async (filename) => {
+  if (!filename) return null;
+  const filePath = path.join(process.cwd(), "uploads", filename);
+  return fs.readFile(filePath, "utf8");
+};
+
+const deleteSlikFileIfExists = async (filename) => {
+  if (!looksLikeTxtFileName(filename)) return;
+  const filePath = path.join(process.cwd(), "uploads", filename);
+  try {
+    await fs.unlink(filePath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+};
+
+const resolveSlikPayload = async ({
+  body,
+  files,
+  fileField,
+  textKeys,
+  clearKeys,
+  existingFileName,
+  existingText,
+}) => {
+  const clearRequested = clearKeys.some((key) => isTruthy(body?.[key]));
+  let resolvedFileName = existingFileName ?? null;
+  let resolvedText = existingText ?? null;
+
+  const directText = getBodyTextValue(body, textKeys);
+  if (directText) {
+    resolvedText = directText;
+  }
+
+  const bodyFallback = body?.[fileField];
+  if (typeof bodyFallback === "string" && bodyFallback.trim() !== "") {
+    if (looksLikeTxtFileName(bodyFallback)) {
+      resolvedFileName = bodyFallback.trim();
+    } else if (!directText) {
+      resolvedText = bodyFallback.trim();
+    }
+  }
+
+  const fileUpload = files?.[fileField]?.[0]?.filename;
+  if (fileUpload) {
+    resolvedFileName = fileUpload;
+    resolvedText = await readSlikFileContent(fileUpload);
+  }
+
+  if (clearRequested) {
+    await deleteSlikFileIfExists(existingFileName);
+    resolvedFileName = null;
+    resolvedText = null;
+  }
+
+  return { resolvedFileName, resolvedText, clearRequested };
+};
+
+const isAdminSlikOnlyRequest = (req) => {
+  const role = String(req.role || "").toLowerCase();
+  if (role !== "admin") return false;
+
+  const allowedBodyKeys = new Set([
+    "slik",
+    "sliktext",
+    "slik_text",
+    "sliktxt",
+    "slikpenanggungjawab",
+    "slik_penanggung_jawab",
+    "sliktextpenanggungjawab",
+    "slik_text_penanggung_jawab",
+    "sliktxtpenanggungjawab",
+    "clear_slik",
+    "clearslik",
+    "clear_slik_penanggung_jawab",
+    "clearslikpenanggungjawab",
+    "no_permohonan",
+    "nopermohonan",
+    "nik",
+  ]);
+  const bodyEntries = Object.entries(req.body || {});
+  const bodyKeysWithValue = bodyEntries
+    .filter(([, value]) => hasMeaningfulValue(value))
+    .map(([key]) => key.toLowerCase());
+  const hasDisallowedBody = bodyKeysWithValue.some((key) => !allowedBodyKeys.has(key));
+
+  const allowedFileKeys = new Set(["slik", "slikpenanggungjawab"]);
+  const fileKeys = Object.keys(req.files || {}).map((key) => key.toLowerCase());
+  const hasOtherFiles = fileKeys.some((key) => !allowedFileKeys.has(key));
+
+  const hasBodyInput = bodyEntries.some(
+    ([key, value]) =>
+      allowedBodyKeys.has(key.toLowerCase()) &&
+      hasMeaningfulValue(value)
+  );
+  const hasFileInput = Boolean(
+    req.files?.slik?.length || req.files?.slikPenanggungJawab?.length
+  );
+  const hasClearInput =
+    isTruthy(req.body?.clearSlik ?? req.body?.clear_slik) ||
+    isTruthy(
+      req.body?.clearSlikPenanggungJawab ?? req.body?.clear_slik_penanggung_jawab
+    );
+
+  return (hasBodyInput || hasFileInput || hasClearInput) && !hasDisallowedBody && !hasOtherFiles;
+};
+
 const resolveNoPermohonan = async (body, userKdpegawai) => {
   let noPermohonan = body.no_permohonan || body.noPermohonan;
   if (!noPermohonan && userKdpegawai) {
@@ -74,22 +213,31 @@ const resolveNoPermohonan = async (body, userKdpegawai) => {
 const resolveDatadiriWhere = (paramValue) => {
   if (!paramValue) return null;
   const value = String(paramValue);
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value
+  );
   if (value.includes("/")) {
     return { no_permohonan: value };
+  }
+  if (isUuid) {
+    return { idDataDiriNasabah: value };
   }
   return { nik: value };
 };
 
 export const getDatadiriAll = async (req, res) => {
   try {
-    if (!["officer", "superadmin", "ketuacabang", "komitecabang"].includes(req.role)) {
+    if (!["officer", "superadmin", "ketuacabang", "komitecabang", "admin", "penyelia"].includes(req.role)) {
       return res.status(403).json({ msg: "Akses ditolak" });
     }
 
+    const wherePermohonan = {};
     const whereUser = {};
 
     // 🔐 FILTER KANTOR (KECUALI SUPERADMIN & DIRUT)
-    if (!["superadmin", "dirut"].includes(req.role)) {
+    if (req.role === "officer") {
+      wherePermohonan.kdpegawai = req.userKdpegawai;
+    } else if (!["superadmin", "dirut"].includes(req.role)) {
       whereUser.kdkantor = req.kdkantor;
     }
 
@@ -98,6 +246,8 @@ export const getDatadiriAll = async (req, res) => {
         {
           model: Permohonan,
           attributes: ["no_permohonan", "kdpegawai"],
+          ...(Object.keys(wherePermohonan).length ? { where: wherePermohonan } : {}),
+          required: Object.keys(wherePermohonan).length || Object.keys(whereUser).length,
           include: [
             {
               model: Users,
@@ -130,8 +280,11 @@ export const getDataDiriByNIK = async (req, res) => {
       return res.status(400).json({ msg: "Parameter No Permohonan tidak ditemukan!" });
     }
 
+    const wherePermohonan = {};
     const whereUser = {};
-    if (!["superadmin", "dirut"].includes(req.role)) {
+    if (req.role === "officer") {
+      wherePermohonan.kdpegawai = req.userKdpegawai;
+    } else if (!["superadmin", "dirut"].includes(req.role)) {
       whereUser.kdkantor = req.kdkantor;
     }
 
@@ -141,6 +294,8 @@ export const getDataDiriByNIK = async (req, res) => {
         {
           model: Permohonan,
           attributes: ["no_permohonan", "kdpegawai"],
+          ...(Object.keys(wherePermohonan).length ? { where: wherePermohonan } : {}),
+          required: Object.keys(wherePermohonan).length || Object.keys(whereUser).length,
           include: [
             {
               model: Users,
@@ -158,7 +313,7 @@ export const getDataDiriByNIK = async (req, res) => {
 
     const userInfo = datadiri.Permohonan?.User;
     if (
-      !["officer", "superadmin", "ketuacabang", "komitecabang"].includes(req.role) &&
+      !["officer", "superadmin", "ketuacabang", "komitecabang", "penyelia"].includes(req.role) &&
       userInfo?.kdkantor !== req.kdkantor
     ) {
       return res.status(403).json({ msg: "Akses lintas kantor ditolak" });
@@ -220,6 +375,33 @@ export const createDataDiri = async (req, res) => {
     const fotoKTPPenanggungJawabFile =
       req.files?.fotoKTPPenanggungJawab?.[0]?.filename ??
       req.files?.fotoKTPPasangan?.[0]?.filename;
+    const { resolvedFileName: slikFileName, resolvedText: slikText } =
+      await resolveSlikPayload({
+        body: req.body,
+        files: req.files,
+        fileField: "slik",
+        textKeys: ["slikText", "slik_text", "slikTxt", "sliktext"],
+        clearKeys: [],
+        existingFileName: null,
+        existingText: null,
+      });
+    const {
+      resolvedFileName: slikPenanggungJawabFileName,
+      resolvedText: slikPenanggungJawabText,
+    } = await resolveSlikPayload({
+      body: req.body,
+      files: req.files,
+      fileField: "slikPenanggungJawab",
+      textKeys: [
+        "slikTextPenanggungJawab",
+        "slik_text_penanggung_jawab",
+        "slikTxtPenanggungJawab",
+        "slik_txt_penanggung_jawab",
+      ],
+      clearKeys: [],
+      existingFileName: null,
+      existingText: null,
+    });
 
     if (!fotoKTPFile || !selfieKTPFile || !fotoKTPPenanggungJawabFile) {
       return res.status(400).json({
@@ -265,6 +447,10 @@ export const createDataDiri = async (req, res) => {
       noHPPenanggungJawab: noHPPenanggungJawab ?? kontakPasangan,
       hubunganDenganPemohon: hubunganDenganPemohon,
       fotoKTPPenanggungJawab: fotoKTPPenanggungJawabFile,
+      slik: slikFileName,
+      slikText: slikText,
+      slikPenanggungJawab: slikPenanggungJawabFileName,
+      slikTextPenanggungJawab: slikPenanggungJawabText,
 
       role: "nasabah",
       kdpegawai: req.userKdpegawai,
@@ -311,6 +497,33 @@ export const updateDataDiriNasabah = async (req, res) => {
     const selfieKTPFile = req.files?.selfieKTP
       ? req.files.selfieKTP[0].filename
       : plainDatadiri.selfieKTP;
+    const { resolvedFileName: resolvedSlikFileName, resolvedText: resolvedSlikText } =
+      await resolveSlikPayload({
+        body: req.body,
+        files: req.files,
+        fileField: "slik",
+        textKeys: ["slikText", "slik_text", "slikTxt", "sliktext"],
+        clearKeys: ["clearSlik", "clear_slik"],
+        existingFileName: plainDatadiri.slik,
+        existingText: plainDatadiri.slikText,
+      });
+    const {
+      resolvedFileName: resolvedSlikPenanggungFileName,
+      resolvedText: resolvedSlikPenanggungText,
+    } = await resolveSlikPayload({
+      body: req.body,
+      files: req.files,
+      fileField: "slikPenanggungJawab",
+      textKeys: [
+        "slikTextPenanggungJawab",
+        "slik_text_penanggung_jawab",
+        "slikTxtPenanggungJawab",
+        "slik_txt_penanggung_jawab",
+      ],
+      clearKeys: ["clearSlikPenanggungJawab", "clear_slik_penanggung_jawab"],
+      existingFileName: plainDatadiri.slikPenanggungJawab,
+      existingText: plainDatadiri.slikTextPenanggungJawab,
+    });
 
     const updateFields = {
       namaLengkap: req.body.namaLengkap,
@@ -343,16 +556,24 @@ export const updateDataDiriNasabah = async (req, res) => {
       noHPPenanggungJawab: req.body.noHPPenanggungJawab ?? req.body.kontakPasangan,
       hubunganDenganPemohon: req.body.hubunganDenganPemohon,
       fotoKTPPenanggungJawab: fotoKTPPenanggungJawabFile,
+      slik: resolvedSlikFileName,
+      slikText: resolvedSlikText,
+      slikPenanggungJawab: resolvedSlikPenanggungFileName,
+      slikTextPenanggungJawab: resolvedSlikPenanggungText,
 
     };
 
-    // Hanya officer atau superadmin yang bisa update
-if (
-  !["superadmin", "komitecabang", "officer"].includes(req.role) &&
-  datadiri.kdpegawai !== req.userKdpegawai
-) {
-  return res.status(403).json({ msg: "Tidak boleh update data kantor lain" });
-}
+    const adminSlikOnly = isAdminSlikOnlyRequest(req);
+    if (req.role === "admin" && !adminSlikOnly) {
+      return res.status(403).json({ msg: "Akses ditolak!" });
+    }
+    if (
+      !["superadmin", "komitecabang", "officer"].includes(req.role) &&
+      !adminSlikOnly &&
+      datadiri.kdpegawai !== req.userKdpegawai
+    ) {
+      return res.status(403).json({ msg: "Tidak boleh update data kantor lain" });
+    }
     Object.keys(updateFields).forEach((key) => {
       if (updateFields[key] === undefined) {
         delete updateFields[key];

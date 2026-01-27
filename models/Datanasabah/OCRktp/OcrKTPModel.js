@@ -4,7 +4,7 @@ import db from "../../../config/Database.js";
 const { DataTypes } = Sequelize;
 
 const ocrKTP = db.define(
-  "datanasabah/ocr-ktp",
+  "datanasabah-ocr-ktp",
   {
     //Data Pribadi
     idOCR: {

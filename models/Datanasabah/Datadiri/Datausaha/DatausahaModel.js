@@ -5,7 +5,7 @@ import Permohonan from "../../generateNoPermohonan/PermohonanModel.js";
 const { DataTypes } = Sequelize;
 
 const Datausaha = db.define(
-  "datanasabah/data-usaha",
+  "datanasabah-data-usaha",
   {
     idDataUsahaNasabah: {
       type: DataTypes.UUID,

@@ -5,13 +5,13 @@ import {
   getDataOCRByNIK,
 } from "../../../../controllers/Datanasabah/OCRktp/OCRKTP.js";
 import { superadminOnly, officerOnly, getAllOnly, updateOnly  } from "../../../../middleware/userOnly.js";
-import  upload  from "../../../../middleware/multerConfig.js";
+import { uploadOCRKTP } from "../../../../middleware/multerConfig.js";
 
 const router = express.Router();
 
 router.get("/datanasabah/ocr-ktp", getAllOnly, getDataOCRAll);
 router.get("/datanasabah/ocr-ktp/:nik", getAllOnly, getDataOCRByNIK);
-router.post("/datanasabah/ocr-ktp",officerOnly, upload.fields([
+router.post("/datanasabah/ocr-ktp",officerOnly, uploadOCRKTP.fields([
     { name: "fotoKTP", maxCount: 1 },
   ]), scanAndSaveOCRKTP);
 

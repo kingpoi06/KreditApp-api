@@ -1,33 +1,8 @@
 import Datadiri from "../../../../models/Datanasabah/Datadiri/DatadiriModel.js";
 import Datajaminan from "../../../../models/Datanasabah/Datadiri/Datajaminan/DatajaminanModel.js";
+import Permohonan from "../../../../models/Datanasabah/generateNoPermohonan/PermohonanModel.js";
+import Users from "../../../../models/UserModel/UserModel.js";
 import db from "../../../../config/Database.js";
-import fs from "fs/promises";
-import path from "path";
-
-const looksLikeTxtFileName = (value) =>
-  typeof value === "string" && value.trim().toLowerCase().endsWith(".txt");
-
-const extractSlikText = (body, fallback) => {
-  const candidates = [body?.slikText, body?.slik_text, body?.slikTxt];
-  const direct = candidates.find(
-    (value) => typeof value === "string" && value.trim() !== ""
-  );
-  if (direct) return direct;
-  if (
-    typeof fallback === "string" &&
-    fallback.trim() !== "" &&
-    !looksLikeTxtFileName(fallback)
-  ) {
-    return fallback;
-  }
-  return null;
-};
-
-const readSlikFileContent = async (filename) => {
-  if (!filename) return null;
-  const filePath = path.join(process.cwd(), "uploads", filename);
-  return fs.readFile(filePath, "utf8");
-};
 
 const normalizeDataJaminan = (record) => {
   const plain = record?.get ? record.get({ plain: true }) : record;
@@ -95,11 +70,53 @@ const resolveNoPermohonan = async (body) => {
   return noPermohonan;
 };
 
+const buildPermohonanAccessInclude = (req) => {
+  const role = String(req.role || "").toLowerCase();
+  const permohonanWhere = {};
+  const userWhere = {};
+
+  if (role === "officer") {
+    permohonanWhere.kdpegawai = req.userKdpegawai;
+  } else if (role === "komitecabang" || role === "ketuacabang" || role === "admin" || role === "penyelia") {
+    if (req.kdkantor) {
+      userWhere.kdkantor = req.kdkantor;
+    }
+  }
+
+  if (!Object.keys(permohonanWhere).length && !Object.keys(userWhere).length) {
+    return [];
+  }
+
+  const includeUser = Object.keys(userWhere).length
+    ? [
+        {
+          model: Users,
+          attributes: [],
+          where: userWhere,
+          required: true,
+        },
+      ]
+    : [];
+
+  return [
+    {
+      model: Permohonan,
+      attributes: [],
+      ...(Object.keys(permohonanWhere).length ? { where: permohonanWhere } : {}),
+      required: true,
+      include: includeUser,
+    },
+  ];
+};
+
 export const getDataJaminan = async (req, res) => {
   try {
     let response;
-    if (req.role === "superadmin" || req.role === "officer" || req.role == "ketuacabang" || req.role === "komitecabang" ) {
-      response = await Datajaminan.findAll();
+    if (req.role === "superadmin" || req.role === "officer" || req.role == "ketuacabang" || req.role === "komitecabang" || req.role === "admin" || req.role === "penyelia") {
+      const includeAccess = buildPermohonanAccessInclude(req);
+      response = await Datajaminan.findAll({
+        ...(includeAccess.length ? { include: includeAccess } : {}),
+      });
     } else {
       response = [];
     }
@@ -118,22 +135,19 @@ export const getDataJaminanByUUID = async (req, res) => {
   try {
     const noPermohonan =
       req.params.no_permohonan || req.params.uuid || req.params.idDataJaminan;
-    const jaminan = await Datajaminan.findOne({
+    if (req.role !== "superadmin" && req.role !== "officer" && req.role !== "ketuacabang" && req.role !== "komitecabang" && req.role !== "admin" && req.role !== "penyelia") {
+      return res.status(403).json({ msg: "Akses ditolak!" });
+    }
+
+    const includeAccess = buildPermohonanAccessInclude(req);
+    const response = await Datajaminan.findOne({
       where: {
         no_permohonan: noPermohonan,
       },
+      ...(includeAccess.length ? { include: includeAccess } : {}),
     });
-    if (!jaminan) return res.status(404).json({ msg: "Data Tidak Ditemukan!" });
-    let response;
-    if (req.role === "superadmin" || req.role === "officer" || req.role === "ketuacabang" || req.role === "komitecabang" ) {
-      response = await Datajaminan.findOne({
-        where: {
-          no_permohonan: jaminan.no_permohonan,
-        },
-      });
-    } else {
-      return res.status(403).json({ msg: "Akses ditolak!" });
-    }
+    if (!response) return res.status(404).json({ msg: "Data Tidak Ditemukan!" });
+
     res.status(200).json({
       message: `Data NASABAH Dengan No Permohonan ${noPermohonan}`,
       Data: [normalizeDataJaminan(response.get({ plain: true }))],
@@ -158,6 +172,7 @@ export const createDataJaminan = async (req, res) => {
     sisaSaldoDana,
     statusHubBankLain,
     totalJaminan,
+    namaPemilikSertifikat,
     jenisJaminanSertifikat,
     jenisSertifikat,
     noSertifikat,
@@ -198,7 +213,6 @@ export const createDataJaminan = async (req, res) => {
     saldoTabunganDiblokirSebesarPlafon,
     noRekening,
     statusPengikatanJaminan,
-    slik: slikTextInput,
   } = req.body;
 
   try {
@@ -210,21 +224,6 @@ export const createDataJaminan = async (req, res) => {
     const dokumentasiAgunanFile = req.files?.dokumentasiAgunan
       ? req.files.dokumentasiAgunan[0].filename
       : null;
-    const fallbackSlikFileName =
-      typeof slikTextInput === "string" && looksLikeTxtFileName(slikTextInput)
-        ? slikTextInput
-        : null;
-    const slikFileName =
-      req.files?.slik?.[0]?.filename ?? fallbackSlikFileName;
-    const bodySlikText = extractSlikText(req.body, slikTextInput);
-    let resolvedSlikText = null;
-    if (req.files?.slik?.[0]?.filename) {
-      resolvedSlikText = await readSlikFileContent(
-        req.files.slik[0].filename
-      );
-    } else if (bodySlikText) {
-      resolvedSlikText = bodySlikText;
-    }
     const resolvedJenisSertifikat = jenisJaminanSertifikat ?? jenisSertifikat;
     const resolvedPengikatanJaminan =
       statusPengikatanJaminan ?? pengikatanJaminan;
@@ -234,6 +233,7 @@ export const createDataJaminan = async (req, res) => {
       noidAgunan: noidAgunan,
       deskripsiAgunan: deskripsiAgunan,
       totalJaminan: totalJaminan,
+      namaPemilikSertifikat: namaPemilikSertifikat,
       nilaiHargaPasar: nilaiHargaPasar,
       statusPengikatan: statusPengikatan,
       dokumentasiAgunan: dokumentasiAgunanFile,
@@ -243,8 +243,6 @@ export const createDataJaminan = async (req, res) => {
       sejakTahun: sejakTahun,
       sisaSaldoDana: sisaSaldoDana,
       statusHubBankLain: statusHubBankLain,
-      slik: slikFileName,
-      slikText: resolvedSlikText,
       jenisJaminanSertifikat: resolvedJenisSertifikat,
       jenisSertifikat: resolvedJenisSertifikat,
       noSertifikat: noSertifikat,
@@ -320,6 +318,7 @@ export const updateDataJaminan = async (req, res) => {
       sisaSaldoDana,
       statusHubBankLain,
       totalJaminan,
+      namaPemilikSertifikat,
       jenisJaminanSertifikat,
       jenisSertifikat,
       noSertifikat,
@@ -360,29 +359,12 @@ export const updateDataJaminan = async (req, res) => {
       saldoTabunganDiblokirSebesarPlafon,
       noRekening,
       statusPengikatanJaminan,
-      slik: slikTextInput,
     } = req.body;
 
     // Ambil file baru dari multer, jika tidak ada pakai file lama
     const dokumentasiAgunanFile = req.files?.dokumentasiAgunan
       ? req.files.dokumentasiAgunan[0].filename
       : plainDatajaminan.dokumentasiAgunan;
-    let resolvedSlikFileName = plainDatajaminan.slik;
-    if (typeof slikTextInput === "string" && looksLikeTxtFileName(slikTextInput)) {
-      resolvedSlikFileName = slikTextInput;
-    }
-    if (req.files?.slik?.[0]?.filename) {
-      resolvedSlikFileName = req.files.slik[0].filename;
-    }
-    const bodySlikText = extractSlikText(req.body, slikTextInput);
-    let resolvedSlikText = plainDatajaminan.slikText;
-    if (req.files?.slik?.[0]?.filename) {
-      resolvedSlikText = await readSlikFileContent(
-        req.files.slik[0].filename
-      );
-    } else if (bodySlikText) {
-      resolvedSlikText = bodySlikText;
-    }
     const resolvedJenisSertifikat = jenisJaminanSertifikat ?? jenisSertifikat;
     const resolvedPengikatanJaminan =
       statusPengikatanJaminan ?? pengikatanJaminan;
@@ -393,6 +375,7 @@ export const updateDataJaminan = async (req, res) => {
       noidAgunan,
       deskripsiAgunan,
       totalJaminan,
+      namaPemilikSertifikat,
       nilaiHargaPasar,
       statusPengikatan,
       dokumentasiAgunan: dokumentasiAgunanFile,
@@ -402,8 +385,6 @@ export const updateDataJaminan = async (req, res) => {
       sejakTahun,
       sisaSaldoDana,
       statusHubBankLain,
-      slik: resolvedSlikFileName,
-      slikText: resolvedSlikText,
       jenisJaminanSertifikat: resolvedJenisSertifikat,
       jenisSertifikat: resolvedJenisSertifikat,
       noSertifikat,

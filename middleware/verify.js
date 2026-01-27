@@ -3,6 +3,31 @@ import Users from "../models/UserModel/UserModel.js";
 // import Pegawais from "../models/pegawai/PegawaiModel.js";
 import jwt from "jsonwebtoken";
 
+const normalizeRole = (value) => {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  const compact = raw.replace(/[\s_-]+/g, "");
+  const aliasMap = {
+    admin: "admin",
+    administrasi: "admin",
+    administrator: "admin",
+    superadmin: "superadmin",
+    superadministrator: "superadmin",
+    superadministasi: "superadmin",
+    officer: "officer",
+    ao: "officer",
+    accountofficer: "officer",
+    stafbisnisaccountofficer: "officer",
+    staffbisnisaccountofficer: "officer",
+    ketuacabang: "ketuacabang",
+    komitecabang: "komitecabang",
+    penyelia: "penyelia",
+    dirut: "dirut",
+    direkturutama: "dirut",
+  };
+  return aliasMap[compact] || raw;
+};
+
 export const verifyUser = async (req, res, next) => {
   if (!req.userKdpegawai) {
     return res.status(401).json({ msg: "Please login to your account!" });
@@ -26,7 +51,7 @@ export const verifyUser = async (req, res, next) => {
     }
 
     req.userDbKdpegawai = user.kdpegawai;
-    req.role= user.role;
+    req.role = normalizeRole(user.role);
     next();
   } catch (error) {
     console.error("Error finding user:", error);
@@ -50,10 +75,9 @@ export const verifyToken = (req, res, next) => {
     req.userKdpegawai = decoded.kdpegawai;
     req.username = decoded.username;
     req.kdkantor = decoded.kdkantor;
-    req.role = decoded.role;
+    req.role = normalizeRole(decoded.role);
     req.sessionId = decoded.sessionId;
     
     next();
   });
 };
-

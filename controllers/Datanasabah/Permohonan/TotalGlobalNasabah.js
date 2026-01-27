@@ -4,8 +4,20 @@ import Users from "../../../models/UserModel/UserModel.js";
 
 export const getDashboardALL = async (req, res) => {
   try {
-    if (!req.kdkantor) {
+    if (
+      !req.kdkantor &&
+      !["superadmin", "dirut", "officer"].includes(req.role)
+    ) {
       return res.status(400).json({ msg: "Kode kantor tidak ditemukan" });
+    }
+
+    const wherePermohonan = {};
+    const whereUser = {};
+
+    if (req.role === "officer") {
+      wherePermohonan.kdpegawai = req.userKdpegawai;
+    } else if (!["superadmin", "dirut"].includes(req.role)) {
+      whereUser.kdkantor = req.kdkantor;
     }
 
     const result = await Permohonan.findAll({
@@ -13,12 +25,15 @@ export const getDashboardALL = async (req, res) => {
         "statusPengajuan",
         [Sequelize.fn("COUNT", Sequelize.col("no_permohonan")), "total"]
       ],
-      include: [{
-        model: Users,
-        attributes: [],
-        where: { kdkantor: req.kdkantor },
-        required: true,
-      }],
+      ...(Object.keys(wherePermohonan).length ? { where: wherePermohonan } : {}),
+      include: Object.keys(whereUser).length
+        ? [{
+            model: Users,
+            attributes: [],
+            where: whereUser,
+            required: true,
+          }]
+        : [],
       group: ["statusPengajuan"],
       raw: true
     });
@@ -55,8 +70,20 @@ export const getDashboardALL = async (req, res) => {
 
 export const getDashboardByNoPermohonan = async (req, res) => {
   try {
-    if (!req.kdkantor) {
+    if (
+      !req.kdkantor &&
+      !["superadmin", "dirut", "officer"].includes(req.role)
+    ) {
       return res.status(400).json({ msg: "Kode kantor tidak ditemukan" });
+    }
+
+    const wherePermohonan = {};
+    const whereUser = {};
+
+    if (req.role === "officer") {
+      wherePermohonan.kdpegawai = req.userKdpegawai;
+    } else if (!["superadmin", "dirut"].includes(req.role)) {
+      whereUser.kdkantor = req.kdkantor;
     }
 
     const data = await Permohonan.findAll({
@@ -65,12 +92,15 @@ export const getDashboardByNoPermohonan = async (req, res) => {
         "statusPengajuan",
         [Sequelize.fn("COUNT", Sequelize.col("no_permohonan")), "total"]
       ],
-      include: [{
-        model: Users,
-        attributes: [],
-        where: { kdkantor: req.kdkantor },
-        required: true,
-      }],
+      ...(Object.keys(wherePermohonan).length ? { where: wherePermohonan } : {}),
+      include: Object.keys(whereUser).length
+        ? [{
+            model: Users,
+            attributes: [],
+            where: whereUser,
+            required: true,
+          }]
+        : [],
       group: ["no_permohonan", "statusPengajuan"],
       raw: true
     });

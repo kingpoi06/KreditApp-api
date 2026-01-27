@@ -1,5 +1,7 @@
 import Datadiri from "../../../../models/Datanasabah/Datadiri/DatadiriModel.js";
 import DataPermohonan from "../../../../models/Datanasabah/Datadiri/Datapermohonan/DataPermohonanModel.js";
+import Permohonan from "../../../../models/Datanasabah/generateNoPermohonan/PermohonanModel.js";
+import Users from "../../../../models/UserModel/UserModel.js";
 import db from "../../../../config/Database.js";
 
 const toNumber = (value) => {
@@ -30,6 +32,45 @@ const stripUndefined = (payload) => {
   return payload;
 };
 
+const buildPermohonanAccessInclude = (req) => {
+  const role = String(req.role || "").toLowerCase();
+  const permohonanWhere = {};
+  const userWhere = {};
+
+  if (role === "officer") {
+    permohonanWhere.kdpegawai = req.userKdpegawai;
+  } else if (role === "komitecabang" || role === "ketuacabang" || role === "penyelia") {
+    if (req.kdkantor) {
+      userWhere.kdkantor = req.kdkantor;
+    }
+  }
+
+  if (!Object.keys(permohonanWhere).length && !Object.keys(userWhere).length) {
+    return [];
+  }
+
+  const includeUser = Object.keys(userWhere).length
+    ? [
+        {
+          model: Users,
+          attributes: [],
+          where: userWhere,
+          required: true,
+        },
+      ]
+    : [];
+
+  return [
+    {
+      model: Permohonan,
+      attributes: [],
+      ...(Object.keys(permohonanWhere).length ? { where: permohonanWhere } : {}),
+      required: true,
+      include: includeUser,
+    },
+  ];
+};
+
 const resolveNoPermohonan = async (body) => {
   let noPermohonan = body.no_permohonan || body.noPermohonan;
   if (!noPermohonan && body.nik) {
@@ -49,7 +90,9 @@ const resolveNoPermohonan = async (body) => {
 
 export const getDatapermohonanALL = async (req, res) => {
   try {
+    const includeAccess = buildPermohonanAccessInclude(req);
     const response = await DataPermohonan.findAll({
+      ...(includeAccess.length ? { include: includeAccess } : {}),
       order: [["createdAt", "DESC"]],
     });
 
@@ -66,8 +109,10 @@ export const getDataPermohonanByUUID = async (req, res) => {
   try {
     const { no_permohonan: noPermohonanParam } = req.params;
     const noPermohonan = noPermohonanParam || req.params.idDataPermohonan;
+    const includeAccess = buildPermohonanAccessInclude(req);
     const permohonan = await DataPermohonan.findOne({
       where: { no_permohonan: noPermohonan },
+      ...(includeAccess.length ? { include: includeAccess } : {}),
     });
 
     if (!permohonan) {

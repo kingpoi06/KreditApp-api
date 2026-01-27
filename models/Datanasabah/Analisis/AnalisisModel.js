@@ -5,7 +5,7 @@ import Permohonan from "../generateNoPermohonan/PermohonanModel.js";
 const { DataTypes } = Sequelize;
 
 const Analisis = db.define(
-  "datanasabah/data-analisis",
+  "datanasabah-data-analisis",
   {
     idDataAnalisis: {
       type: DataTypes.UUID,
@@ -152,14 +152,6 @@ const Analisis = db.define(
     },
     statusAgunan: {
       type: DataTypes.TEXT,
-      allowNull: true,
-    },
-    capital1: {
-      type: DataTypes.TEXT("long"),
-      allowNull: true,
-    },
-    capital2: {
-      type: DataTypes.TEXT("long"),
       allowNull: true,
     },
     capacity1: {
@@ -341,4 +333,3 @@ Permohonan.hasOne(Analisis, { foreignKey: "no_permohonan" });
 Analisis.belongsTo(Permohonan, { foreignKey: "no_permohonan" });
 
 export default Analisis;
-

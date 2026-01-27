@@ -1,3 +1,4 @@
+import { QueryTypes } from "sequelize";
 import db from "../config/Database.js";
 
 const qi = db.getQueryInterface();
@@ -17,12 +18,13 @@ const getColumns = async (table) => {
 
 const getForeignKeysForColumn = async (table, column) => {
   if (!databaseName) return [];
-  const [rows] = await db.query(
+  const rows = await db.query(
     `SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = ${escapeValue(
       databaseName
     )} AND TABLE_NAME = ${escapeValue(table)} AND COLUMN_NAME = ${escapeValue(
       column
-    )} AND REFERENCED_TABLE_NAME IS NOT NULL`
+    )} AND REFERENCED_TABLE_NAME IS NOT NULL`,
+    { type: QueryTypes.SELECT }
   );
   return rows.map((row) => row.CONSTRAINT_NAME);
 };
@@ -36,6 +38,34 @@ const dropForeignKeys = async (table, column) => {
       `ALTER TABLE ${tableName} DROP FOREIGN KEY ${quoteIdentifier(constraint)}`
     );
   }
+};
+
+const getUniqueIndexesForColumn = async (table, column) => {
+  if (!databaseName) return [];
+  const rows = await db.query(
+    `SELECT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ${escapeValue(
+      databaseName
+    )} AND TABLE_NAME = ${escapeValue(table)} AND COLUMN_NAME = ${escapeValue(
+      column
+    )} AND NON_UNIQUE = 0 AND INDEX_NAME <> 'PRIMARY'`,
+    { type: QueryTypes.SELECT }
+  );
+  return rows.map((row) => row.INDEX_NAME);
+};
+
+const dropIndexes = async (table, indexes) => {
+  if (!indexes.length) return;
+  const tableName = quoteTable(table);
+  for (const indexName of indexes) {
+    await db.query(
+      `ALTER TABLE ${tableName} DROP INDEX ${quoteIdentifier(indexName)}`
+    );
+  }
+};
+
+const dropUniqueIndexesForColumn = async (table, column) => {
+  const indexes = await getUniqueIndexesForColumn(table, column);
+  await dropIndexes(table, indexes);
 };
 
 const ensureColumn = async (table, columns, column, definition) => {
@@ -59,8 +89,9 @@ const dropColumnIfExists = async (table, columns, column) => {
 const ensureNoNull = async (table, column) => {
   const tableName = quoteTable(table);
   const columnName = quoteIdentifier(column);
-  const [rows] = await db.query(
-    `SELECT COUNT(*) AS cnt FROM ${tableName} WHERE ${columnName} IS NULL OR ${columnName} = ''`
+  const rows = await db.query(
+    `SELECT COUNT(*) AS cnt FROM ${tableName} WHERE ${columnName} IS NULL OR ${columnName} = ''`,
+    { type: QueryTypes.SELECT }
   );
   const count = Number(rows?.[0]?.cnt ?? 0);
   if (count > 0) {
@@ -73,8 +104,9 @@ const ensureNoNull = async (table, column) => {
 const ensureNoDuplicates = async (table, column) => {
   const tableName = quoteTable(table);
   const columnName = quoteIdentifier(column);
-  const [rows] = await db.query(
-    `SELECT ${columnName} AS value, COUNT(*) AS cnt FROM ${tableName} GROUP BY ${columnName} HAVING cnt > 1`
+  const rows = await db.query(
+    `SELECT ${columnName} AS value, COUNT(*) AS cnt FROM ${tableName} GROUP BY ${columnName} HAVING cnt > 1`,
+    { type: QueryTypes.SELECT }
   );
   if (rows.length > 0) {
     throw new Error(
@@ -124,7 +156,7 @@ const ensureColumnNotNull = async (table, columns, column, fallbackType) => {
 };
 
 export default async function migrateNoPermohonanPrimaryKey() {
-  const dataDiriTable = "datanasabah/data-diri";
+  const dataDiriTable = "datanasabah-data-diri";
   const dataUsahaTable = "datanasabah/data-usaha";
   const dataJaminanTable = "datanasabah/data-jaminan";
   const dataPermohonanTable = "datanasabah/data-permohonan";
@@ -160,11 +192,38 @@ export default async function migrateNoPermohonanPrimaryKey() {
     await ensurePrimaryKey(dataUsahaTable, dataUsahaColumns, "no_permohonan");
   }
 
-  const dataDiriColumns = await getColumns(dataDiriTable);
+  let dataDiriColumns = await getColumns(dataDiriTable);
   if (dataDiriColumns) {
+    const addedId = await ensureColumn(
+      dataDiriTable,
+      dataDiriColumns,
+      "idDataDiriNasabah",
+      "CHAR(36) NULL"
+    );
+    if (addedId) {
+      dataDiriColumns = await getColumns(dataDiriTable);
+    }
+
+    await dropUniqueIndexesForColumn(dataDiriTable, "nik");
+
+    const dataDiriTableName = quoteTable(dataDiriTable);
+    const idColumn = quoteIdentifier("idDataDiriNasabah");
+    await db.query(
+      `UPDATE ${dataDiriTableName} SET ${idColumn} = UUID() WHERE ${idColumn} IS NULL OR ${idColumn} = ''`
+    );
+
+    await ensureNoNull(dataDiriTable, "idDataDiriNasabah");
+    await ensureColumnNotNull(
+      dataDiriTable,
+      dataDiriColumns,
+      "idDataDiriNasabah",
+      "CHAR(36)"
+    );
+    dataDiriColumns = await getColumns(dataDiriTable);
+
     await ensureNoNull(dataDiriTable, "no_permohonan");
     await ensureNoDuplicates(dataDiriTable, "no_permohonan");
-    await ensurePrimaryKey(dataDiriTable, dataDiriColumns, "no_permohonan");
+    await ensurePrimaryKey(dataDiriTable, dataDiriColumns, "idDataDiriNasabah");
   }
 
   let dataJaminanColumns = await getColumns(dataJaminanTable);

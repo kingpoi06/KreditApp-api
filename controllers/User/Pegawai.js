@@ -51,6 +51,12 @@ const buildSummaryMessage = (totalBefore, addedCount) =>
 
 const buildUpdatePayload = (body) => {
   const payload = {
+    No:
+      body.No ??
+      body.no ??
+      body.no_pegawai ??
+      body.kode_pegawai ??
+      body.kodePegawai,
     Nama_Pegawai:
       body.Nama_Pegawai ?? body.nama_pegawai ?? body.namaPegawai ?? body.nama,
     NRP: body.NRP ?? body.nrp,
@@ -307,7 +313,7 @@ export const getPegawaiAll = async (req, res) => {
 
 export const updatePegawai = async (req, res) => {
   try {
-    const noPegawai = req.params?.no;
+    const noPegawai = String(req.params?.no || "").trim();
     if (!noPegawai) {
       return res.status(400).json({ msg: "No pegawai tidak ditemukan" });
     }
@@ -318,6 +324,31 @@ export const updatePegawai = async (req, res) => {
     }
 
     const payload = buildUpdatePayload(req.body);
+    if (payload.No !== undefined) {
+      payload.No = String(payload.No).trim();
+      if (!payload.No) {
+        delete payload.No;
+      }
+    }
+    if (payload.NRP !== undefined) {
+      payload.NRP = String(payload.NRP).trim();
+      if (!payload.NRP) {
+        delete payload.NRP;
+      }
+    }
+    if (!Object.keys(payload).length) {
+      return res.status(400).json({ msg: "Tidak ada data untuk diperbarui" });
+    }
+
+    if (payload.No && payload.No !== pegawai.No) {
+      const existing = await Pegawai.findByPk(payload.No);
+      if (existing) {
+        return res.status(400).json({ msg: "No pegawai sudah digunakan" });
+      }
+    } else if (payload.No === pegawai.No) {
+      delete payload.No;
+    }
+
     if (!Object.keys(payload).length) {
       return res.status(400).json({ msg: "Tidak ada data untuk diperbarui" });
     }
@@ -329,11 +360,13 @@ export const updatePegawai = async (req, res) => {
       }
     }
 
-    await pegawai.update(payload);
+    await Pegawai.update(payload, { where: { No: pegawai.No } });
+    const refreshNo = payload.No ?? pegawai.No;
+    const updatedPegawai = await Pegawai.findByPk(refreshNo);
 
     return res.status(200).json({
       msg: "Data pegawai berhasil diperbarui",
-      data: pegawai,
+      data: updatedPegawai ?? pegawai,
     });
   } catch (error) {
     return res.status(500).json({ msg: error.message });

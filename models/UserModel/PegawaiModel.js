@@ -23,11 +23,7 @@ const Pegawai = db.define ('pegawai', {
     },
     NRP:{
         type: DataTypes.STRING(100),
-        allowNull: false,
-        validate:{
-            notEmpty: true,
-            len:[3, 100]
-        }
+        allowNull: true,
     },
     Nama_Jabatan:{
         type: DataTypes.STRING(100),

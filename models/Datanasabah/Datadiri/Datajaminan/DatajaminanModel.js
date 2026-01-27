@@ -5,7 +5,7 @@ import Permohonan from "../../generateNoPermohonan/PermohonanModel.js";
 const { DataTypes } = Sequelize;
 
 const Datajaminan = db.define(
-  "datanasabah/data-jaminan",
+  "datanasabah-data-jaminan",
   {
     idDataJaminan: {
       type: DataTypes.UUID,
@@ -70,16 +70,12 @@ const Datajaminan = db.define(
       type: DataTypes.STRING(50),
       allowNull: true,
     },
-    slik: {
-      type: DataTypes.STRING(255),
-      allowNull: true,
-    },
-    slikText: {
-      type: DataTypes.TEXT("long"),
-      allowNull: true,
-    },
 
     // SERTIFIKAT
+    namaPemilikSertifikat: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
     jenisJaminanSertifikat: {
       type: DataTypes.STRING(100),
       allowNull: true,

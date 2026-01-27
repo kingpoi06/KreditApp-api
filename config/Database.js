@@ -1,15 +1,3 @@
-import { Sequelize } from "sequelize";
-
-const db = new Sequelize("AnalisisKreditBpr_db", "root", "", {
-  host: "localhost",
-  dialect: "mysql",
-  logging: (msg) => console.log(msg.split(":")[1]),
-});
-
-
-export { db };
-export default db;
-
 // import { Sequelize } from "sequelize";
 // import dotenv from "dotenv";
 
@@ -25,11 +13,22 @@ export default db;
 
 // const db = new Sequelize(DB_DBDATABASE, DB_USERNAME, DB_PASSWORD, {
 //   host: DB_HOST,
-//   port: DB_PORT ? Number(DB_PORT) : undefined,
-//   dialect: "mysql",
+//   port: Number(process.env.DB_PORT || 3306),
+//   dialect: "mariadb",
 //   logging: (msg) => console.log(msg.split(":")[1]),
 // });
 
 // export { db };
 // export default db;
 
+import { Sequelize } from "sequelize";
+
+const db = new Sequelize("AnalisisKreditBpr_db", "root", "", {
+  host: "localhost",
+  dialect: "mysql",
+  logging: (msg) => console.log(msg.split(":")[1]),
+});
+
+
+export { db };
+export default db;

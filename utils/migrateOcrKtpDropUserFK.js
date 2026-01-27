@@ -1,3 +1,4 @@
+import { QueryTypes } from "sequelize";
 import db from "../config/Database.js";
 
 const qi = db.getQueryInterface();
@@ -8,13 +9,13 @@ const quoteIdentifier = (value) => `\`${String(value).replace(/`/g, "``")}\``;
 
 const getForeignKeys = async () => {
   try {
-    const [rows] = await db.query(
+    const rows = await db.query(
       `SELECT CONSTRAINT_NAME, REFERENCED_TABLE_NAME, COLUMN_NAME
        FROM information_schema.KEY_COLUMN_USAGE
        WHERE TABLE_SCHEMA = DATABASE()
          AND TABLE_NAME = :tableName
          AND REFERENCED_TABLE_NAME IS NOT NULL`,
-      { replacements: { tableName } }
+      { replacements: { tableName }, type: QueryTypes.SELECT }
     );
     return rows;
   } catch (error) {

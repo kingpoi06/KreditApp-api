@@ -5,7 +5,7 @@ import Permohonan from "../../generateNoPermohonan/PermohonanModel.js";
 const { DataTypes } = Sequelize;
 
 const Analisis = db.define(
-  "datanasabah/data-analisis",
+  "datanasabah-data-analisis",
   {
     idDataAnalisis: {
       type: DataTypes.UUID,
@@ -95,14 +95,6 @@ const Analisis = db.define(
     },
     ketergantunganPelangganUtama: {
       type: DataTypes.STRING(50),
-      allowNull: true,
-    },
-    capital1: {
-      type: DataTypes.TEXT("long"),
-      allowNull: true,
-    },
-    capital2: {
-      type: DataTypes.TEXT("long"),
       allowNull: true,
     },
     capacity1: {

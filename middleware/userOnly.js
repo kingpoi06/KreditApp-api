@@ -1,5 +1,30 @@
 import Users from "../models/UserModel/UserModel.js";
 
+const normalizeRole = (value) => {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  const compact = raw.replace(/[\s_-]+/g, "");
+  const aliasMap = {
+    admin: "admin",
+    administrasi: "admin",
+    administrator: "admin",
+    superadmin: "superadmin",
+    superadministrator: "superadmin",
+    superadministasi: "superadmin",
+    officer: "officer",
+    ao: "officer",
+    accountofficer: "officer",
+    stafbisnisaccountofficer: "officer",
+    staffbisnisaccountofficer: "officer",
+    ketuacabang: "ketuacabang",
+    komitecabang: "komitecabang",
+    penyelia: "penyelia",
+    dirut: "dirut",
+    direkturutama: "dirut",
+  };
+  return aliasMap[compact] || raw;
+};
+
 const checkRole = (roles) => async (req, res, next) => {
   try {
     const user = await Users.findOne({
@@ -12,10 +37,12 @@ const checkRole = (roles) => async (req, res, next) => {
       return res.status(404).json({ msg: `User not found at ${req.userKdpegawai}` });
     }
 
-    if (!roles.includes(user.role)) {
+    const normalizedRole = normalizeRole(user.role);
+    const allowedRoles = roles.map((role) => normalizeRole(role));
+    if (!allowedRoles.includes(normalizedRole)) {
       return res.status(403).json({ msg: "Access denied" });
     }
-    req.role = user.role;
+    req.role = normalizedRole;
     next();
   } catch (error) {
     console.error("Error finding user:", error);
@@ -27,7 +54,7 @@ export const superadminOnly = checkRole(["superadmin"]);
 export const officerOnly = checkRole(["officer"]);
 export const ketuacabangOnly = checkRole(["ketuacabang"]);
 export const dirutOnly = checkRole(["dirut"]);
-export const getAllOnly = checkRole(["superadmin", "officer", "ketuacabang", "komitecabang"]);
+export const getAllOnly = checkRole(["superadmin", "officer", "admin", "komitecabang", "penyelia"]);
 export const updateOnly = checkRole(["superadmin", "officer"]);
-export const getPrivateOnly = checkRole(["superadmin", "ketuacabang", "dirut"]);
-
+export const updateOnlyWithAdmin = checkRole(["superadmin", "officer", "admin"]);
+export const getPrivateOnly = checkRole(["superadmin", "admmin", "dirut"]);

@@ -28,6 +28,7 @@ import migrateUserCabangKantor from "./utils/migrateUserCabangKantor.js";
 import migrateDataPermohonanColumns from "./utils/migrateDataPermohonanColumns.js";
 import migrateOcrKtpDropUserFK from "./utils/migrateOcrKtpDropUserFK.js";
 import migrateUserSessionId from "./utils/migrateUserSessionId.js";
+import migrateDatadiriSlikColumns from "./utils/migrateDatadiriSlikColumns.js";
 
 import { verifyToken, verifyUser } from "./middleware/verify.js";
 
@@ -64,12 +65,15 @@ app.use(express.json());
   await migrateUserCabangKantor();
   await migrateUserSessionId();
   await migrateDataPermohonanColumns();
+  await migrateDatadiriSlikColumns();
   await db.sync({ alter: { drop: false } });
 })();
 
 // 5. Define unprotected routes
 app.use(AuthRoute);
 app.use(TokenRoute);
+app.use( AuthRoute);
+app.use( TokenRoute);
 
 // 🔹 Mendapatkan __dirname di ES Module
 const __filename = fileURLToPath(import.meta.url);

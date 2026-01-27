@@ -54,7 +54,7 @@ export const postLogin = async (req, res) => {
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production", 
-      sameSite: "Strict",
+      sameSite: "None",
       maxAge: 3600000, // 1 jam
     });
 

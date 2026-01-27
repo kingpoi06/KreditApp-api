@@ -5,13 +5,18 @@ import Permohonan from "../generateNoPermohonan/PermohonanModel.js"
 const { DataTypes } = Sequelize;
 
 const Datadiri = db.define(
-  "datanasabah/data-diri",
+  "datanasabah-data-diri",
   {
     //Data Pribadi
+    idDataDiriNasabah: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      allowNull: false,
+      primaryKey: true,
+    },
     nik: {
       type: DataTypes.STRING(16),
       allowNull: false,
-      primaryKey: true,
       validate: {
         notEmpty: true,
       },
@@ -131,6 +136,14 @@ const Datadiri = db.define(
         notEmpty: true,
       },
     },
+    slik: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+    slikText: {
+      type: DataTypes.TEXT("long"),
+      allowNull: true,
+    },
 
     nikPenanggungJawab: {
       type: DataTypes.STRING(16),
@@ -186,6 +199,14 @@ const Datadiri = db.define(
       validate: {
         notEmpty: true,
       },
+    },
+    slikPenanggungJawab: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+    slikTextPenanggungJawab: {
+      type: DataTypes.TEXT("long"),
+      allowNull: true,
     },
 
     //Role Akun Pengguna

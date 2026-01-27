@@ -8,22 +8,26 @@ import db from "../../../config/Database.js";
 
 export const getPermohonanALL = async (req, res) => {
   try {
-    if (!["officer", "superadmin", "ketuacabang", "komitecabang"].includes(req.role)) {
+    if (!["officer", "superadmin", "ketuacabang", "komitecabang", "admin", "penyelia"].includes(req.role)) {
       return res.status(403).json({ msg: "Akses ditolak" });
     }
 
+    const wherePermohonan = {};
     const whereUser = {};
 
-    if (!["superadmin", "dirut"].includes(req.role)) {
+    if (req.role === "officer") {
+      wherePermohonan.kdpegawai = req.userKdpegawai;
+    } else if (!["superadmin", "dirut"].includes(req.role)) {
       whereUser.kdkantor = req.kdkantor;
     }
 
     const data = await Permohonan.findAll({
+      ...(Object.keys(wherePermohonan).length ? { where: wherePermohonan } : {}),
       include: [
         {
           model: Users,
           attributes: ["kdpegawai", "namalengkap", "kdkantor"],
-          where: { kdkantor: req.kdkantor }
+          ...(Object.keys(whereUser).length ? { where: whereUser } : {}),
         },
       ],
       order: [["createdAt", "DESC"]],
@@ -45,13 +49,22 @@ export const getPermohonanByNoPermohonan = async (req, res) => {
   try {
     const { no_permohonan } = req.params;
 
+    const wherePermohonan = { no_permohonan };
+    const whereUser = {};
+
+    if (req.role === "officer") {
+      wherePermohonan.kdpegawai = req.userKdpegawai;
+    } else if (!["superadmin", "dirut"].includes(req.role)) {
+      whereUser.kdkantor = req.kdkantor;
+    }
+
     const permohonan = await Permohonan.findOne({
-      where: { no_permohonan },
+      where: wherePermohonan,
       include: [
         {
           model: Users,
           attributes: ["kdpegawai", "namalengkap", "kdkantor"],
-          where: { kdkantor: req.kdkantor }
+          ...(Object.keys(whereUser).length ? { where: whereUser } : {}),
         },
       ],
     });
@@ -61,7 +74,7 @@ export const getPermohonanByNoPermohonan = async (req, res) => {
     }
 
     if (
-      !["officer", "superadmin", "ketuacabang", "komitecabang"].includes(req.role) &&
+      !["officer", "superadmin", "ketuacabang", "komitecabang", "penyelia"].includes(req.role) &&
       permohonan.User.kdkantor !== req.kdkantor
     ) {
       return res.status(403).json({ msg: "Akses lintas kantor ditolak" });
@@ -124,6 +137,7 @@ export const updatePermohonanNasabah = async (req, res) => {
       return status;
     };
 
+    const role = String(req.role || "").toLowerCase();
     const updateFields = {
       jenisKredit: req.body.jenisKredit,
       tglInput: req.body.tglInput,
@@ -140,8 +154,24 @@ export const updatePermohonanNasabah = async (req, res) => {
       caraPengembalianKredit: req.body.caraPengembalianKredit,
     };
 
+    if (role === "penyelia") {
+      const allowedFields = new Set([
+        "keteranganPengajuan",
+        "statusPermohonan",
+        "namaAsuransi",
+        "premi",
+        "namaNotaris",
+        "biayaAPHT",
+      ]);
+      Object.keys(updateFields).forEach((key) => {
+        if (!allowedFields.has(key)) {
+          delete updateFields[key];
+        }
+      });
+    }
+
     if (
-    !["superadmin", "komitecabang", "officer"].includes(req.role) &&
+    !["superadmin", "komitecabang", "officer", "penyelia"].includes(role) &&
     datadiri.kdpegawai !== req.kdpegawai
     ) {
     return res.status(403).json({ msg: "Tidak boleh update data kantor lain" });
@@ -176,12 +206,23 @@ export const deletePermohonanNasabah = async (req, res) => {
       return res.status(400).json({ msg: "Parameter no permohonan tidak ditemukan!" });
     }
 
-    const datadiri = await Permohonan.findOne({ where: { no_permohonan } });
+    const datadiri = await Permohonan.findOne({
+      where: { no_permohonan },
+      include: [
+        {
+          model: Users,
+          attributes: ["kdpegawai", "kdkantor"],
+        },
+      ],
+    });
     if (!datadiri) {
       return res.status(404).json({ msg: "Data no permohonan nasabah tidak ditemukan!" });
     }
 
-    if ( req.role !== "superadmin" && datadiri.kdpegawai !== req.kdpegawai
+    if (
+      req.role !== "superadmin" &&
+      datadiri.User?.kdkantor &&
+      datadiri.User.kdkantor !== req.kdkantor
     ) {
       return res.status(403).json({ msg: "Tidak boleh hapus data kantor lain" });
     }
@@ -204,4 +245,3 @@ export const deletePermohonanNasabah = async (req, res) => {
     res.status(500).json({ msg: "Terjadi kesalahan server" });
   }
 };
-

@@ -1,5 +1,7 @@
 import Datadiri from "../../../../models/Datanasabah/Datadiri/DatadiriModel.js";
 import Datainstansi from "../../../../models/Datanasabah/Datadiri/Datainstansi/DatainstansiModel.js";
+import Permohonan from "../../../../models/Datanasabah/generateNoPermohonan/PermohonanModel.js";
+import Users from "../../../../models/UserModel/UserModel.js";
 import db from "../../../../config/Database.js";
 
 const normalizeDataInstansi = (record) => {
@@ -42,6 +44,45 @@ const stripUndefined = (payload) => {
   return payload;
 };
 
+const buildPermohonanAccessInclude = (req) => {
+  const role = String(req.role || "").toLowerCase();
+  const permohonanWhere = {};
+  const userWhere = {};
+
+  if (role === "officer") {
+    permohonanWhere.kdpegawai = req.userKdpegawai;
+  } else if (role === "komitecabang" || role === "ketuacabang" || role === "penyelia") {
+    if (req.kdkantor) {
+      userWhere.kdkantor = req.kdkantor;
+    }
+  }
+
+  if (!Object.keys(permohonanWhere).length && !Object.keys(userWhere).length) {
+    return [];
+  }
+
+  const includeUser = Object.keys(userWhere).length
+    ? [
+        {
+          model: Users,
+          attributes: [],
+          where: userWhere,
+          required: true,
+        },
+      ]
+    : [];
+
+  return [
+    {
+      model: Permohonan,
+      attributes: [],
+      ...(Object.keys(permohonanWhere).length ? { where: permohonanWhere } : {}),
+      required: true,
+      include: includeUser,
+    },
+  ];
+};
+
 const resolveNoPermohonan = async (body) => {
   let noPermohonan = body.no_permohonan || body.noPermohonan;
   if (!noPermohonan && body.nik) {
@@ -62,8 +103,11 @@ const resolveNoPermohonan = async (body) => {
 export const getDataInstansi = async (req, res) => {
   try {
     let response;
-    if (["superadmin", "officer", "ketuacabang", "komitecabang"].includes(req.role)) {
-      response = await Datainstansi.findAll();
+    if (["superadmin", "officer", "ketuacabang", "komitecabang", "penyelia"].includes(req.role)) {
+      const includeAccess = buildPermohonanAccessInclude(req);
+      response = await Datainstansi.findAll({
+        ...(includeAccess.length ? { include: includeAccess } : {}),
+      });
     } else {
       response = [];
     }
@@ -80,16 +124,18 @@ export const getDataInstansiByNoPermohonan = async (req, res) => {
   try {
     const noPermohonan =
       req.params.no_permohonan || req.params.idDataInstansiNasabah || req.params.uuid;
+    if (!["superadmin", "officer", "ketuacabang", "komitecabang", "penyelia"].includes(req.role)) {
+      return res.status(403).json({ msg: "Akses ditolak!" });
+    }
+
+    const includeAccess = buildPermohonanAccessInclude(req);
     const instansi = await Datainstansi.findOne({
       where: { no_permohonan: noPermohonan },
+      ...(includeAccess.length ? { include: includeAccess } : {}),
     });
 
     if (!instansi) {
       return res.status(404).json({ msg: "Data Tidak Ditemukan!" });
-    }
-
-    if (!["superadmin", "officer", "ketuacabang", "komitecabang"].includes(req.role)) {
-      return res.status(403).json({ msg: "Akses ditolak!" });
     }
 
     res.status(200).json({

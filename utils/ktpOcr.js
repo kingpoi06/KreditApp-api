@@ -1,15 +1,20 @@
 import sharp from "sharp";
 
 const OCR_SPACE_ENDPOINT = "https://api.ocr.space/parse/image";
-const OCR_SPACE_API_KEY = process.env.OCR_SPACE_API_KEY || "K83392095988957";
+const OCR_SPACE_API_KEY = process.env.OCR_SPACE_API_KEY || "K87910109088957";
 const OCR_SPACE_LANGUAGE = process.env.OCR_SPACE_LANGUAGE || "ind";
 const OCR_SPACE_FALLBACK_LANGUAGE = "eng";
 const OCR_SPACE_ENGINE = process.env.OCR_SPACE_ENGINE || "2";
 const OCR_SPACE_ENGINE_FALLBACK = "1";
 const OCR_SPACE_API_KEY_IS_PLACEHOLDER = OCR_SPACE_API_KEY === "helloworld";
+const OCR_UPLOAD_MAX_BYTES = Number(process.env.OCR_UPLOAD_MAX_BYTES || 10 * 1024 * 1024);
+const OCR_SPACE_MAX_BYTES = Number(process.env.OCR_SPACE_MAX_BYTES || 950 * 1024);
 const OCR_TARGET_WIDTH = 2400;
 const OCR_TARGET_HEIGHT = 1500;
 const OCR_PREVIEW_WIDTH = 1200;
+const OCR_AUTO_PREVIEW_WIDTH = 900;
+const OCR_DEFAULT_JPEG_QUALITY = 90;
+const OCR_PNG_COMPRESSION = 9;
 const OCR_TRIM_THRESHOLD = 25;
 const OCR_BRIGHT_THRESHOLD = 185;
 const OCR_MIN_SCORE = 6;
@@ -44,6 +49,13 @@ const normalizeOCR = (str) => str
     .replace(/\s+/g, " ")
     .trim();
 
+const normalizeText = (str) => str
+    .toUpperCase()
+    .replace(/[^\x20-\x7E\r\n]/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\r?\n\s*/g, "\n")
+    .trim();
+
 const toDigits = (value) => value
     .toUpperCase()
     .replace(/O/g, "0")
@@ -62,12 +74,218 @@ const normalizeLabel = (value) => value
     .replace(/\s+/g, " ")
     .trim();
 
-const requestOcr = async (imageBuffer, language, engine = OCR_SPACE_ENGINE) => {
+const DATE_REGEX = /\b\d{2}[-\/]\d{2}[-\/]\d{4}\b/;
+const LABEL_WORD_REGEX = /(NIK|NAMA|TEMPAT|TGL|LAHIR|JENIS|KELAMIN|GOL|DARAH|ALAMAT|RT|RW|KELURAHAN|KEL\b|DESA|KECAMATAN|AGAMA|STATUS|PEKERJAAN|KEWARGANEGARAAN|PROVINSI|KABUPATEN|KOTA|BERLAKU)/i;
+const ADDRESS_BLOCKLIST_REGEX = /(NIK|NAMA|TEMPAT|TGL|LAHIR|JENIS|KELAMIN|GOL|DARAH|AGAMA|STATUS|PEKERJAAN|KEWARGANEGARAAN|PROVINSI|KABUPATEN|KOTA|BERLAKU)/i;
+const GENDER_REGEX = /\b(LAKI|PEREMPUAN)\b/i;
+
+const countLetters = (value) => (value.match(/[A-Z]/g) || []).length;
+
+const isLikelyNameValue = (value) => {
+    if (!value) return false;
+    const upper = String(value).toUpperCase();
+    if (DATE_REGEX.test(upper)) return false;
+    if (LABEL_WORD_REGEX.test(upper)) return false;
+    if (/\d/.test(upper)) return false;
+    return countLetters(upper) >= 3;
+};
+
+const isLikelyRegionValue = (value) => {
+    if (!value) return false;
+    const upper = String(value).toUpperCase();
+    if (DATE_REGEX.test(upper)) return false;
+    if (/\d/.test(upper)) return false;
+    if (LABEL_WORD_REGEX.test(upper)) return false;
+    if (GENDER_REGEX.test(upper)) return false;
+    if (MARITAL_STATUS_VALUES.some((val) => upper.includes(val))) return false;
+    if (RELIGION_VALUES.some((val) => upper.includes(val))) return false;
+    return countLetters(upper) >= 3;
+};
+
+const isLikelyAddressValue = (value) => {
+    if (!value) return false;
+    const upper = String(value).toUpperCase();
+    if (ADDRESS_BLOCKLIST_REGEX.test(upper)) return false;
+    return countLetters(upper) >= 3;
+};
+
+const isLikelyJobValue = (value) => {
+    if (!value) return false;
+    const upper = String(value).toUpperCase();
+    if (DATE_REGEX.test(upper)) return false;
+    if (LABEL_WORD_REGEX.test(upper)) return false;
+    return countLetters(upper) >= 3;
+};
+
+const isLikelyStatusValue = (value) => {
+    if (!value) return false;
+    const upper = String(value).toUpperCase();
+    return MARITAL_STATUS_VALUES.some((val) => upper.includes(val));
+};
+
+const isLikelyReligionValue = (value) => {
+    if (!value) return false;
+    const upper = String(value).toUpperCase();
+    return RELIGION_VALUES.some((val) => upper.includes(val));
+};
+
+const isLikelyNationalityValue = (value) => {
+    if (!value) return false;
+    const upper = String(value).toUpperCase();
+    return /\bWNI\b/.test(upper) || /\bWNA\b/.test(upper);
+};
+
+const isLikelyGenderValue = (value) => {
+    if (!value) return false;
+    return GENDER_REGEX.test(String(value).toUpperCase());
+};
+
+const isLikelyDateValue = (value) => DATE_REGEX.test(String(value));
+
+const FIELD_VALIDATORS = {
+    nikKTP: (value) => toDigits(value).length >= 16,
+    namaLengkap: isLikelyNameValue,
+    tempatLahir: isLikelyNameValue,
+    tanggalLahir: isLikelyDateValue,
+    jenisKelamin: isLikelyGenderValue,
+    agama: isLikelyReligionValue,
+    statusPerkawinan: isLikelyStatusValue,
+    alamatLengkap: isLikelyAddressValue,
+    rt: (value) => /^\d{1,3}$/.test(String(value).replace(/\D/g, "")),
+    rw: (value) => /^\d{1,3}$/.test(String(value).replace(/\D/g, "")),
+    desaKelurahan: isLikelyRegionValue,
+    kecamatan: isLikelyRegionValue,
+    kabupaten: isLikelyRegionValue,
+    provinsi: isLikelyRegionValue,
+    jenispekerjaan: isLikelyJobValue,
+    kewarganegaraan: isLikelyNationalityValue,
+};
+
+const isFieldValueValid = (field, value) => {
+    if (!value) return false;
+    const validator = FIELD_VALIDATORS[field];
+    if (!validator) return true;
+    return validator(value);
+};
+
+const sanitizeParsedFields = (result) => {
+    if (!result) return result;
+    const sanitized = { ...result };
+    if (sanitized.nikKTP) {
+        const digits = toDigits(sanitized.nikKTP);
+        sanitized.nikKTP = digits.length >= 16 ? digits.slice(0, 16) : null;
+    }
+    if (sanitized.rt) {
+        const digits = toDigits(sanitized.rt);
+        sanitized.rt = digits ? digits.slice(0, 3) : null;
+    }
+    if (sanitized.rw) {
+        const digits = toDigits(sanitized.rw);
+        sanitized.rw = digits ? digits.slice(0, 3) : null;
+    }
+    for (const field of Object.keys(FIELD_VALIDATORS)) {
+        if (!isFieldValueValid(field, sanitized[field])) {
+            sanitized[field] = null;
+        }
+    }
+    return sanitized;
+};
+
+const shouldReplaceField = (field, currentValue, incomingValue) => {
+    if (!incomingValue) return false;
+    if (!currentValue) return true;
+    const currentValid = isFieldValueValid(field, currentValue);
+    const incomingValid = isFieldValueValid(field, incomingValue);
+    if (incomingValid && !currentValid) return true;
+    return false;
+};
+
+const shrinkToMaxBytes = async (payload, maxBytes) => {
+    if (!payload?.buffer || payload.buffer.length <= maxBytes) return payload;
+
+    const qualitySteps = [90, 82, 74, 66, 58];
+    const preferPng = payload.mimeType === "image/png";
+
+    if (preferPng) {
+        const pngBuffer = await sharp(payload.buffer)
+            .png({ compressionLevel: OCR_PNG_COMPRESSION })
+            .toBuffer();
+        if (pngBuffer.length <= maxBytes) {
+            return { buffer: pngBuffer, mimeType: "image/png" };
+        }
+    }
+
+    let lastBuffer = payload.buffer;
+    for (const quality of qualitySteps) {
+        const jpegBuffer = await sharp(payload.buffer)
+            .jpeg({ quality, chromaSubsampling: "4:4:4" })
+            .toBuffer();
+        lastBuffer = jpegBuffer;
+        if (jpegBuffer.length <= maxBytes) {
+            return { buffer: jpegBuffer, mimeType: "image/jpeg" };
+        }
+    }
+
+    const meta = await sharp(payload.buffer).metadata();
+    if (!meta?.width || !meta?.height) {
+        return { buffer: lastBuffer, mimeType: "image/jpeg" };
+    }
+
+    let scale = 0.9;
+    let resizedBuffer = lastBuffer;
+    while (scale >= 0.5) {
+        const width = Math.max(900, Math.round(meta.width * scale));
+        const height = Math.max(600, Math.round(meta.height * scale));
+        for (const quality of qualitySteps) {
+            const resized = await sharp(payload.buffer)
+                .resize({ width, height, fit: "inside", withoutEnlargement: true })
+                .jpeg({ quality, chromaSubsampling: "4:4:4" })
+                .toBuffer();
+            resizedBuffer = resized;
+            if (resized.length <= maxBytes) {
+                return { buffer: resized, mimeType: "image/jpeg" };
+            }
+        }
+        scale *= 0.85;
+    }
+
+    return { buffer: resizedBuffer, mimeType: "image/jpeg" };
+};
+
+const ensureOcrSpacePayload = async (payload) => {
+    if (!payload) return payload;
+    const normalized = Buffer.isBuffer(payload)
+        ? { buffer: payload, mimeType: "image/jpeg" }
+        : payload;
+    if (!normalized?.buffer) return normalized;
+    let next = {
+        ...normalized,
+        mimeType: normalized.mimeType || "image/jpeg",
+    };
+    if (next.buffer.length > OCR_UPLOAD_MAX_BYTES) {
+        next = await shrinkToMaxBytes(next, OCR_UPLOAD_MAX_BYTES);
+    }
+    if (next.buffer.length > OCR_SPACE_MAX_BYTES) {
+        next = await shrinkToMaxBytes(next, OCR_SPACE_MAX_BYTES);
+    }
+    return next;
+};
+
+const requestOcr = async (imagePayload, language, engine = OCR_SPACE_ENGINE) => {
     if (OCR_SPACE_API_KEY_IS_PLACEHOLDER) {
         throw new Error("OCR_SPACE_API_KEY belum diisi");
     }
+    const safePayload = await ensureOcrSpacePayload(imagePayload);
+    if (!safePayload?.buffer) {
+        throw new Error("Payload OCR kosong.");
+    }
+    if (safePayload.buffer.length > OCR_SPACE_MAX_BYTES) {
+        throw new Error("File terlalu besar untuk OCR Space. Silakan kompres ulang.");
+    }
+    const mimeType = safePayload.mimeType === "image/png" ? "image/png" : "image/jpeg";
+    const extension = mimeType === "image/png" ? "png" : "jpg";
     const form = new FormData();
-    form.append("file", new Blob([imageBuffer], { type: "image/jpeg" }), "ktp.jpg");
+    form.append("file", new Blob([safePayload.buffer], { type: mimeType }), `ktp.${extension}`);
     form.append("language", language);
     form.append("isOverlayRequired", "true");
     form.append("detectOrientation", "true");
@@ -103,18 +321,18 @@ const requestOcr = async (imageBuffer, language, engine = OCR_SPACE_ENGINE) => {
     return payload;
 };
 
-const requestOcrWithFallback = async (imageBuffer) => {
+const requestOcrWithFallback = async (imagePayload) => {
     try {
-        return await requestOcr(imageBuffer, OCR_SPACE_LANGUAGE, OCR_SPACE_ENGINE);
+        return await requestOcr(imagePayload, OCR_SPACE_LANGUAGE, OCR_SPACE_ENGINE);
     } catch (error) {
         if (error?.status === 403 && OCR_SPACE_ENGINE !== OCR_SPACE_ENGINE_FALLBACK) {
-            return await requestOcr(imageBuffer, OCR_SPACE_LANGUAGE, OCR_SPACE_ENGINE_FALLBACK);
+            return await requestOcr(imagePayload, OCR_SPACE_LANGUAGE, OCR_SPACE_ENGINE_FALLBACK);
         }
         if (
             OCR_SPACE_LANGUAGE !== OCR_SPACE_FALLBACK_LANGUAGE &&
             String(error?.message || "").includes("E201")
         ) {
-            return await requestOcr(imageBuffer, OCR_SPACE_FALLBACK_LANGUAGE, OCR_SPACE_ENGINE);
+            return await requestOcr(imagePayload, OCR_SPACE_FALLBACK_LANGUAGE, OCR_SPACE_ENGINE);
         }
         throw error;
     }
@@ -124,6 +342,80 @@ const applyContrast = (pipeline, contrast) => {
     if (contrast === 1) return pipeline;
     const intercept = 128 - contrast * 128;
     return pipeline.linear(contrast, intercept);
+};
+
+const getLumaStats = async (imageBuffer) => {
+    try {
+        const stats = await sharp(imageBuffer)
+            .resize({ width: OCR_AUTO_PREVIEW_WIDTH, withoutEnlargement: true })
+            .grayscale()
+            .stats();
+        const channel = stats?.channels?.[0];
+        if (!channel) return null;
+        return {
+            mean: channel.mean,
+            stdev: channel.stdev,
+            min: channel.min,
+            max: channel.max,
+        };
+    } catch {
+        return null;
+    }
+};
+
+const buildAutoPresetOptions = async (imageBuffer) => {
+    const stats = await getLumaStats(imageBuffer);
+    let threshold = 150;
+    let brightness = 1;
+    let contrast = 1.1;
+    let gamma = 1;
+    let median = 0;
+
+    if (stats) {
+        const { mean, stdev } = stats;
+
+        if (mean < 90) {
+            brightness = 1.35;
+            gamma = 1.1;
+            threshold = 125;
+        } else if (mean < 120) {
+            brightness = 1.2;
+            threshold = 138;
+        } else if (mean > 185) {
+            brightness = 0.85;
+            threshold = 178;
+        } else if (mean > 165) {
+            brightness = 0.9;
+            threshold = 165;
+        }
+
+        if (stdev < 30) {
+            contrast = 1.55;
+        } else if (stdev < 45) {
+            contrast = 1.35;
+        } else if (stdev < 60) {
+            contrast = 1.2;
+        }
+
+        if (stdev > 70) {
+            threshold = null;
+        }
+        if (stdev > 85) {
+            median = 3;
+        }
+    }
+
+    return {
+        threshold,
+        brightness,
+        contrast,
+        gamma,
+        normalize: true,
+        sharpen: true,
+        median,
+        outputFormat: threshold === null ? "jpeg" : "png",
+        jpegQuality: OCR_DEFAULT_JPEG_QUALITY,
+    };
 };
 
 const preprocessForOcr = async (imageBuffer, options = {}) => {
@@ -136,9 +428,12 @@ const preprocessForOcr = async (imageBuffer, options = {}) => {
         sharpen = true,
         blur = 0,
         median = 0,
+        outputFormat,
+        jpegQuality = OCR_DEFAULT_JPEG_QUALITY,
     } = options;
 
     let pipeline = sharp(imageBuffer)
+        .flatten({ background: "#ffffff" })
         .resize({
             width: OCR_TARGET_WIDTH,
             height: OCR_TARGET_HEIGHT,
@@ -173,10 +468,21 @@ const preprocessForOcr = async (imageBuffer, options = {}) => {
         pipeline = pipeline.threshold(threshold);
     }
 
-    return pipeline.toBuffer();
+    const format = outputFormat || (threshold === null ? "jpeg" : "png");
+    if (format === "png") {
+        return {
+            buffer: await pipeline.png({ compressionLevel: OCR_PNG_COMPRESSION }).toBuffer(),
+            mimeType: "image/png",
+        };
+    }
+    return {
+        buffer: await pipeline.jpeg({ quality: jpegQuality, chromaSubsampling: "4:4:4" }).toBuffer(),
+        mimeType: "image/jpeg",
+    };
 };
 
 const OCR_PRESETS_PRIMARY = [
+    { id: "auto", options: buildAutoPresetOptions },
     { id: "std", options: { threshold: 150, contrast: 1.1 } },
     { id: "soft", options: { threshold: null, contrast: 1.1 } },
 ];
@@ -280,37 +586,68 @@ const parseFieldsFromLines = (rawText) => {
     const findValue = (regex, options = {}) => {
         const {
             allowNextLine = false,
+            allowPrevLine = false,
             multiline = false,
             group = 1,
             labelRegex,
+            valueValidator,
         } = options;
+
+        const isValid = (value) => {
+            if (!value) return false;
+            if (typeof valueValidator === "function") {
+                return valueValidator(value);
+            }
+            return true;
+        };
 
         for (let i = 0; i < lines.length; i += 1) {
             const line = lines[i];
             const match = line.raw.match(regex);
-            if (!match && labelRegex && !line.label.match(labelRegex)) {
+            const isLabelMatch = Boolean(match) || (labelRegex && line.label.match(labelRegex));
+            if (!isLabelMatch) {
                 continue;
             }
+
             if (match) {
                 const directValue = (match[group] || "").trim();
-                if (directValue) {
+                if (directValue && isValid(directValue)) {
                     return directValue;
                 }
             }
+
             const separatedValue = extractAfterSeparator(line.raw);
-            if (separatedValue) {
+            if (separatedValue && isValid(separatedValue)) {
                 return separatedValue;
             }
+
+            if (allowPrevLine) {
+                const prevLine = lines[i - 1];
+                if (prevLine && prevLine.raw && !isLabelLine(prevLine)) {
+                    if (isValid(prevLine.raw)) {
+                        return prevLine.raw;
+                    }
+                }
+            }
+
             if (!allowNextLine) return null;
+
             const parts = [];
             for (let j = i + 1; j < lines.length; j += 1) {
                 const nextLine = lines[j];
                 if (!nextLine.raw) continue;
                 if (isLabelLine(nextLine)) break;
-                parts.push(nextLine.raw);
-                if (!multiline) break;
+                if (multiline) {
+                    parts.push(nextLine.raw);
+                    const combined = parts.join(" ").trim();
+                    if (isValid(combined)) {
+                        return combined;
+                    }
+                } else if (isValid(nextLine.raw)) {
+                    return nextLine.raw;
+                }
             }
-            return parts.join(" ").trim() || null;
+            return null;
         }
         return null;
     };
@@ -325,12 +662,19 @@ const parseFieldsFromLines = (rawText) => {
         }
     }
 
-    const nama = findValue(/NAMA\s*[:.-]?\s*(.*)/i, { allowNextLine: true, labelRegex: /NAMA/i });
+    const nama = findValue(/NAMA\s*[:.-]?\s*(.*)/i, {
+        allowNextLine: true,
+        allowPrevLine: true,
+        labelRegex: /NAMA/i,
+        valueValidator: isLikelyNameValue,
+    });
     if (nama) result.namaLengkap = cleanFieldValue(nama, { normalize: true });
 
     const ttlValue = findValue(/TEMPAT\/?T?G?L?\s*LAHIR\s*[:.-]?\s*(.*)/i, {
         allowNextLine: true,
+        allowPrevLine: true,
         labelRegex: /(TEMPAT|TGL|TG1|TGI|LAHIR)/i,
+        valueValidator: isLikelyDateValue,
     });
     if (ttlValue) {
         const ttlParsed = parseTtlValue(ttlValue);
@@ -343,12 +687,17 @@ const parseFieldsFromLines = (rawText) => {
     const genderParsed = parseGenderValue(cleanedGender || rawText);
     if (genderParsed) result.jenisKelamin = genderParsed;
 
-    const agama = findValue(/AGAMA\s*[:.-]?\s*(.*)/i, { allowNextLine: true, labelRegex: /AGAMA/i });
+    const agama = findValue(/AGAMA\s*[:.-]?\s*(.*)/i, {
+        allowNextLine: true,
+        labelRegex: /AGAMA/i,
+        valueValidator: isLikelyReligionValue,
+    });
     if (agama) result.agama = cleanFieldValue(agama, { normalize: true });
 
     const status = findValue(/STATUS\s+PERKAW[I1]NAN\s*[:.-]?\s*(.*)/i, {
         allowNextLine: true,
         labelRegex: /(STATUS|PERKAW)/i,
+        valueValidator: isLikelyStatusValue,
     });
     if (status) {
         const cleanedStatus = stripAfterLabel(status, /(PEKERJAAN|KEWARGANEGARAAN)/i);
@@ -359,6 +708,7 @@ const parseFieldsFromLines = (rawText) => {
         allowNextLine: true,
         multiline: true,
         labelRegex: /ALAMAT/i,
+        valueValidator: isLikelyAddressValue,
     });
     if (alamat) {
         const cleanedAlamat = stripAfterLabel(alamat, /RT\s*\/?\s*RW/i);
@@ -375,22 +725,36 @@ const parseFieldsFromLines = (rawText) => {
     const desa = findValue(/(?:KELURAHAN|KEL\b|DESA)\s*[:.-]?\s*(.*)/i, {
         allowNextLine: true,
         labelRegex: /(KELURAHAN|KEL\b|DESA)/i,
+        valueValidator: isLikelyRegionValue,
     });
     if (desa) result.desaKelurahan = cleanFieldValue(desa, { normalize: true });
 
-    const kecamatan = findValue(/KECAMATAN\s*[:.-]?\s*(.*)/i, { allowNextLine: true, labelRegex: /KECAMATAN/i });
+    const kecamatan = findValue(/KECAMATAN\s*[:.-]?\s*(.*)/i, {
+        allowNextLine: true,
+        labelRegex: /KECAMATAN/i,
+        valueValidator: isLikelyRegionValue,
+    });
     if (kecamatan) result.kecamatan = cleanFieldValue(kecamatan, { normalize: true });
 
     const kabupaten = findValue(/(?:KABUPATEN|KOTA)\s*[:.-]?\s*(.*)/i, {
         allowNextLine: true,
         labelRegex: /(KABUPATEN|KOTA)/i,
+        valueValidator: isLikelyRegionValue,
     });
     if (kabupaten) result.kabupaten = cleanFieldValue(kabupaten, { normalize: true });
 
-    const provinsi = findValue(/PROVINSI\s*[:.-]?\s*(.*)/i, { allowNextLine: true, labelRegex: /PROVINSI/i });
+    const provinsi = findValue(/PROVINSI\s*[:.-]?\s*(.*)/i, {
+        allowNextLine: true,
+        labelRegex: /PROVINSI/i,
+        valueValidator: isLikelyRegionValue,
+    });
     if (provinsi) result.provinsi = cleanFieldValue(provinsi, { normalize: true });
 
-    const pekerjaan = findValue(/PEKERJAAN\s*[:.-]?\s*(.*)/i, { allowNextLine: true, labelRegex: /PEKERJAAN/i });
+    const pekerjaan = findValue(/PEKERJAAN\s*[:.-]?\s*(.*)/i, {
+        allowNextLine: true,
+        labelRegex: /PEKERJAAN/i,
+        valueValidator: isLikelyJobValue,
+    });
     if (pekerjaan) {
         const cleanedPekerjaan = stripAfterLabel(pekerjaan, /KEWARGANEGARAAN/i);
         result.jenispekerjaan = cleanFieldValue(cleanedPekerjaan, { normalize: true });
@@ -399,6 +763,7 @@ const parseFieldsFromLines = (rawText) => {
     const kewarganegaraan = findValue(/KEWARGANEGARAAN\s*[:.-]?\s*(.*)/i, {
         allowNextLine: true,
         labelRegex: /KEWARGANEGARAAN/i,
+        valueValidator: isLikelyNationalityValue,
     });
     if (kewarganegaraan) result.kewarganegaraan = cleanFieldValue(kewarganegaraan, { normalize: true });
 
@@ -428,10 +793,12 @@ const parseFieldsFromFlatText = (rawText) => {
     }
 
     const nama = extractFlatValue("NAMA");
-    if (nama) result.namaLengkap = cleanFieldValue(nama, { normalize: true });
+    if (nama && isLikelyNameValue(nama)) {
+        result.namaLengkap = cleanFieldValue(nama, { normalize: true });
+    }
 
     const ttlValue = extractFlatValue("TEMPAT\\/?T?G?L?\\s*LAHIR|TGL\\s*LAHIR");
-    if (ttlValue) {
+    if (ttlValue && isLikelyDateValue(ttlValue)) {
         const ttlParsed = parseTtlValue(ttlValue);
         if (ttlParsed.tempatLahir) result.tempatLahir = ttlParsed.tempatLahir;
         if (ttlParsed.tanggalLahir) result.tanggalLahir = ttlParsed.tanggalLahir;
@@ -443,16 +810,18 @@ const parseFieldsFromFlatText = (rawText) => {
     if (genderParsed) result.jenisKelamin = genderParsed;
 
     const agama = extractFlatValue("AGAMA");
-    if (agama) result.agama = cleanFieldValue(agama, { normalize: true });
+    if (agama && isLikelyReligionValue(agama)) {
+        result.agama = cleanFieldValue(agama, { normalize: true });
+    }
 
     const status = extractFlatValue("STATUS\\s+PERKAW[I1]NAN");
-    if (status) {
+    if (status && isLikelyStatusValue(status)) {
         const cleanedStatus = stripAfterLabel(status, /(PEKERJAAN|KEWARGANEGARAAN)/i);
         result.statusPerkawinan = cleanFieldValue(cleanedStatus, { normalize: true });
     }
 
     const alamat = extractFlatValue("ALAMAT");
-    if (alamat) {
+    if (alamat && isLikelyAddressValue(alamat)) {
         const cleanedAlamat = stripAfterLabel(alamat, /RT\s*\/?\s*RW/i);
         result.alamatLengkap = cleanFieldValue(cleanedAlamat);
     }
@@ -465,25 +834,35 @@ const parseFieldsFromFlatText = (rawText) => {
     }
 
     const desa = extractFlatValue("KELURAHAN|KEL\\b|DESA");
-    if (desa) result.desaKelurahan = cleanFieldValue(desa, { normalize: true });
+    if (desa && isLikelyRegionValue(desa)) {
+        result.desaKelurahan = cleanFieldValue(desa, { normalize: true });
+    }
 
     const kecamatan = extractFlatValue("KECAMATAN");
-    if (kecamatan) result.kecamatan = cleanFieldValue(kecamatan, { normalize: true });
+    if (kecamatan && isLikelyRegionValue(kecamatan)) {
+        result.kecamatan = cleanFieldValue(kecamatan, { normalize: true });
+    }
 
     const kabupaten = extractFlatValue("KABUPATEN|KOTA");
-    if (kabupaten) result.kabupaten = cleanFieldValue(kabupaten, { normalize: true });
+    if (kabupaten && isLikelyRegionValue(kabupaten)) {
+        result.kabupaten = cleanFieldValue(kabupaten, { normalize: true });
+    }
 
     const provinsi = extractFlatValue("PROVINSI");
-    if (provinsi) result.provinsi = cleanFieldValue(provinsi, { normalize: true });
+    if (provinsi && isLikelyRegionValue(provinsi)) {
+        result.provinsi = cleanFieldValue(provinsi, { normalize: true });
+    }
 
     const pekerjaan = extractFlatValue("PEKERJAAN");
-    if (pekerjaan) {
+    if (pekerjaan && isLikelyJobValue(pekerjaan)) {
         const cleanedPekerjaan = stripAfterLabel(pekerjaan, /KEWARGANEGARAAN/i);
         result.jenispekerjaan = cleanFieldValue(cleanedPekerjaan, { normalize: true });
     }
 
     const kewarganegaraan = extractFlatValue("KEWARGANEGARAAN");
-    if (kewarganegaraan) result.kewarganegaraan = cleanFieldValue(kewarganegaraan, { normalize: true });
+    if (kewarganegaraan && isLikelyNationalityValue(kewarganegaraan)) {
+        result.kewarganegaraan = cleanFieldValue(kewarganegaraan, { normalize: true });
+    }
 
     return result;
 };
@@ -534,7 +913,9 @@ const inferFromHeuristics = (result, rawText) => {
         const dateLine = labeledLines.find((line) => dateRegex.test(line.raw));
         if (dateLine) {
             const ttlParsed = parseTtlValue(pickLineValue(dateLine.raw));
-            if (ttlParsed.tempatLahir) result.tempatLahir = ttlParsed.tempatLahir;
+            if (ttlParsed.tempatLahir && isLikelyNameValue(ttlParsed.tempatLahir)) {
+                result.tempatLahir = ttlParsed.tempatLahir;
+            }
             if (!result.tanggalLahir && ttlParsed.tanggalLahir) result.tanggalLahir = ttlParsed.tanggalLahir;
         }
     }
@@ -559,12 +940,16 @@ const inferFromHeuristics = (result, rawText) => {
         const alamatIndex = findLineIndex(/ALAMAT/i);
         if (alamatIndex >= 0) {
             const cleanedAlamat = stripAfterLabel(pickLineValue(labeledLines[alamatIndex].raw), /RT\s*\/?\s*RW/i);
-            result.alamatLengkap = cleanFieldValue(cleanedAlamat);
+            if (isLikelyAddressValue(cleanedAlamat)) {
+                result.alamatLengkap = cleanFieldValue(cleanedAlamat);
+            }
         }
         if (!result.alamatLengkap && rtIndex > 0) {
             const candidate = labeledLines[rtIndex - 1];
             if (candidate && !isLabelLine(candidate)) {
-                result.alamatLengkap = cleanFieldValue(candidate.raw);
+                if (isLikelyAddressValue(candidate.raw)) {
+                    result.alamatLengkap = cleanFieldValue(candidate.raw);
+                }
             }
         }
     }
@@ -572,20 +957,32 @@ const inferFromHeuristics = (result, rawText) => {
     if (!result.desaKelurahan) {
         const desaIndex = findLineIndex(/KELURAHAN|KEL\b|DESA/i);
         if (desaIndex >= 0) {
-            result.desaKelurahan = cleanFieldValue(pickLineValue(labeledLines[desaIndex].raw), { normalize: true });
+            const value = pickLineValue(labeledLines[desaIndex].raw);
+            if (isLikelyRegionValue(value)) {
+                result.desaKelurahan = cleanFieldValue(value, { normalize: true });
+            }
         } else if (rtIndex >= 0 && labeledLines[rtIndex + 1] && !isLabelLine(labeledLines[rtIndex + 1])) {
-            result.desaKelurahan = cleanFieldValue(labeledLines[rtIndex + 1].raw, { normalize: true });
+            const value = labeledLines[rtIndex + 1].raw;
+            if (isLikelyRegionValue(value)) {
+                result.desaKelurahan = cleanFieldValue(value, { normalize: true });
+            }
         }
     }
 
     if (!result.kecamatan) {
         const kecIndex = findLineIndex(/KECAMATAN/i);
         if (kecIndex >= 0) {
-            result.kecamatan = cleanFieldValue(pickLineValue(labeledLines[kecIndex].raw), { normalize: true });
+            const value = pickLineValue(labeledLines[kecIndex].raw);
+            if (isLikelyRegionValue(value)) {
+                result.kecamatan = cleanFieldValue(value, { normalize: true });
+            }
         } else {
             const desaIndex = findLineIndex(/KELURAHAN|KEL\b|DESA/i);
             if (desaIndex >= 0 && labeledLines[desaIndex + 1] && !isLabelLine(labeledLines[desaIndex + 1])) {
-                result.kecamatan = cleanFieldValue(labeledLines[desaIndex + 1].raw, { normalize: true });
+                const value = labeledLines[desaIndex + 1].raw;
+                if (isLikelyRegionValue(value)) {
+                    result.kecamatan = cleanFieldValue(value, { normalize: true });
+                }
             }
         }
     }
@@ -593,14 +990,20 @@ const inferFromHeuristics = (result, rawText) => {
     if (!result.kabupaten) {
         const kabIndex = findLineIndex(/KABUPATEN|KOTA/i);
         if (kabIndex >= 0) {
-            result.kabupaten = cleanFieldValue(pickLineValue(labeledLines[kabIndex].raw), { normalize: true });
+            const value = pickLineValue(labeledLines[kabIndex].raw);
+            if (isLikelyRegionValue(value)) {
+                result.kabupaten = cleanFieldValue(value, { normalize: true });
+            }
         }
     }
 
     if (!result.provinsi) {
         const provIndex = findLineIndex(/PROVINSI/i);
         if (provIndex >= 0) {
-            result.provinsi = cleanFieldValue(pickLineValue(labeledLines[provIndex].raw), { normalize: true });
+            const value = pickLineValue(labeledLines[provIndex].raw);
+            if (isLikelyRegionValue(value)) {
+                result.provinsi = cleanFieldValue(value, { normalize: true });
+            }
         }
     }
 
@@ -622,7 +1025,10 @@ const inferFromHeuristics = (result, rawText) => {
     if (!result.jenispekerjaan) {
         const pekerjaanIndex = findLineIndex(/PEKERJAAN/i);
         if (pekerjaanIndex >= 0) {
-            result.jenispekerjaan = cleanFieldValue(pickLineValue(labeledLines[pekerjaanIndex].raw), { normalize: true });
+            const value = pickLineValue(labeledLines[pekerjaanIndex].raw);
+            if (isLikelyJobValue(value)) {
+                result.jenispekerjaan = cleanFieldValue(value, { normalize: true });
+            }
         } else {
             const statusIndex = findLineIndex(/STATUS|PERKAW/i);
             const kewIndex = findLineIndex(/KEWARGANEGARAAN|WNI|WNA/i);
@@ -632,8 +1038,10 @@ const inferFromHeuristics = (result, rawText) => {
                 const candidate = labeledLines[i];
                 if (!candidate || isLabelLine(candidate)) continue;
                 if (/[A-Z]{3,}/i.test(candidate.raw)) {
-                    result.jenispekerjaan = cleanFieldValue(candidate.raw, { normalize: true });
-                    break;
+                    if (isLikelyJobValue(candidate.raw)) {
+                        result.jenispekerjaan = cleanFieldValue(candidate.raw, { normalize: true });
+                        break;
+                    }
                 }
             }
         }
@@ -644,20 +1052,21 @@ const fillMissingFields = (target, source) => {
     if (!target || !source) return;
     for (const [key, value] of Object.entries(source)) {
         if (key.startsWith("_")) continue;
-        if (!target[key] && value) {
+        if (!value) continue;
+        if (!target[key] || shouldReplaceField(key, target[key], value)) {
             target[key] = value;
         }
     }
 };
 
 const parseFromRawText = (rawText, confidence) => {
-    const text = normalizeOCR(rawText);
+    const text = normalizeText(rawText);
     const match = (regex) => text.match(regex)?.[1]?.trim() || null;
 
     const nikKTP = extractNik(rawText);
-    const namaLengkap = text.match(/NAMA\s*:?\s*([A-Z\s]+)(?=\n|TEMPAT|TGI)/)?.[1]?.trim() || null;
+    const namaLengkap = text.match(/NAMA\s*:?\s*([^\r\n]+)/i)?.[1]?.trim() || null;
     const ttl = rawText.match(
-        /Tempat\/?Tg[il]\s*Lahir\s*:?\s*([A-Za-z\s.'-]+)\s*,\s*(\d{2}[-\/]\d{2}[-\/]\d{4})/i
+        /Tempat\/?Tg[il]\s*Lahir\s*:?\s*([^\r\n,]+)\s*,\s*(\d{2}[-\/]\d{2}[-\/]\d{4})/i
     );
     const tempatLahir = ttl?.[1]?.trim() || null;
     const tanggalLahir = ttl?.[2]?.trim() || null;
@@ -669,7 +1078,7 @@ const parseFromRawText = (rawText, confidence) => {
     const agama = match(/AGAMA\s*:?\s*([A-Z]+)/);
 
     const statusPerkawinan = rawText.match(
-        /STATUS\s*PERKAW[I1]NAN\s*\.?\s*:?\s*([A-Z\s.]+?)(?=\n\s*PEKERJAAN|\n\s*KEWARGANEGARAAN|$)/i
+        /STATUS\s*PERKAW[I1]NAN\s*\.?\s*:?\s*([^\r\n]+)(?=\n\s*PEKERJAAN|\n\s*KEWARGANEGARAAN|$)/i
     )?.[1]?.trim().replace(/\.+$/, "") || null;
 
     const alamatMatch = rawText.match(/ALAMAT\s*:?\s*([\s\S]*?)\n\s*RT\s*\/?\s*RW/i);
@@ -679,18 +1088,18 @@ const parseFromRawText = (rawText, confidence) => {
     const rt = rtMatch?.[1] || null;
     const rw = rtMatch?.[2] || null;
 
-    const desaMatch = rawText.match(/(?:KEL|KELURAHAN|DESA)\s*:?\s*([A-Z\s]+)(?=\n\s*KECAMATAN|\n\s*KEC)/i);
+    const desaMatch = rawText.match(/(?:KEL|KELURAHAN|DESA)\s*:?\s*([^\r\n]+)(?=\n\s*KECAMATAN|\n\s*KEC)/i);
     const desaKelurahan = desaMatch?.[1]?.trim() || null;
 
-    const kecamatan = rawText.match(/KECAMATAN\s*:?\s*([A-Z\s]+)(?=\n|AGAMA|STATUS|PEKERJAAN)/i)?.[1]?.trim() || null;
+    const kecamatan = rawText.match(/KECAMATAN\s*:?\s*([^\r\n]+)(?=\n|AGAMA|STATUS|PEKERJAAN)/i)?.[1]?.trim() || null;
     const kabupatenMatch = rawText.match(
-        /KABUPATEN\s*\/?\s*KOTA\s*:?\s*([A-Z\s]+)(?=\n|PROVINSI|NIK)/i
-    ) || rawText.match(/(?:KABUPATEN|KOTA)\s*:?\s*([A-Z\s]+)(?=\n|PROVINSI|NIK)/i);
+        /KABUPATEN\s*\/?\s*KOTA\s*:?\s*([^\r\n]+)(?=\n|PROVINSI|NIK)/i
+    ) || rawText.match(/(?:KABUPATEN|KOTA)\s*:?\s*([^\r\n]+)(?=\n|PROVINSI|NIK)/i);
     const kabupaten = kabupatenMatch?.[1]?.trim() || null;
-    const provinsiMatch = rawText.match(/PROVINSI\s*:?\s*([A-Z\s]+)(?=\n(?:KABUPATEN|KOTA)|\nNIK|$)/i);
+    const provinsiMatch = rawText.match(/PROVINSI\s*:?\s*([^\r\n]+)(?=\n(?:KABUPATEN|KOTA)|\nNIK|$)/i);
     const provinsi = provinsiMatch?.[1]?.trim() || null;
 
-    const pekerjaanMatch = rawText.match(/Pekerjaan\s*[:.]?\s*([\s\S]+?)\nKewarganegaraan/i);
+    const pekerjaanMatch = rawText.match(/Pekerjaan\s*[:.]?\s*([^\r\n]+?)(?=\nKewarganegaraan|\r\nKewarganegaraan|$)/i);
     let jenispekerjaan = pekerjaanMatch?.[1]?.trim() || null;
 
     if (jenispekerjaan) {
@@ -701,10 +1110,10 @@ const parseFromRawText = (rawText, confidence) => {
         }
     }
 
-    const kewarganegaraanMatch = rawText.match(/Kewarganegaraan\s*[:.]?\s*([A-Z]+)/i);
+    const kewarganegaraanMatch = rawText.match(/Kewarganegaraan\s*[:.]?\s*([^\r\n]+)/i);
     const kewarganegaraan = kewarganegaraanMatch?.[1]?.trim() || null;
 
-    const baseResult = {
+    const baseResult = sanitizeParsedFields({
         nikKTP,
         namaLengkap,
         tempatLahir,
@@ -723,13 +1132,13 @@ const parseFromRawText = (rawText, confidence) => {
         kewarganegaraan,
         _rawText: rawText,
         _confidence: confidence,
-    };
+    });
 
     fillMissingFields(baseResult, parseFieldsFromLines(rawText));
     fillMissingFields(baseResult, parseFieldsFromFlatText(rawText));
     inferFromHeuristics(baseResult, rawText);
 
-    return baseResult;
+    return sanitizeParsedFields(baseResult);
 };
 
 const findBrightBounds = (data, width, height) => {
@@ -913,7 +1322,8 @@ const mergeResults = (base, incoming) => {
     const merged = { ...base };
     for (const [key, value] of Object.entries(incoming)) {
         if (key.startsWith("_")) continue;
-        if (!merged[key] && value) {
+        if (!value) continue;
+        if (!merged[key] || shouldReplaceField(key, merged[key], value)) {
             merged[key] = value;
         }
     }
@@ -962,8 +1372,17 @@ const buildCandidates = async (rotatedBuffer) => {
     return candidates;
 };
 
+const resolvePresetOptions = async (candidateBuffer, preset) => {
+    if (!preset?.options) return {};
+    if (typeof preset.options === "function") {
+        return await preset.options(candidateBuffer);
+    }
+    return preset.options;
+};
+
 const runOcrPreset = async (candidateBuffer, preset) => {
-    const processedImage = await preprocessForOcr(candidateBuffer, preset.options);
+    const options = await resolvePresetOptions(candidateBuffer, preset);
+    const processedImage = await preprocessForOcr(candidateBuffer, options);
     const payload = await requestOcrWithFallback(processedImage);
     const parsed = parseOcrPayload(payload);
     const score = scoreOcrResult(parsed);

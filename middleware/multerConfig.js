@@ -19,18 +19,38 @@ const storage = multer.diskStorage({
   },
 });
 
-// Filter hanya gambar atau TXT untuk SLIK (tambahan PDF untuk dokumen instansi)
+// Filter hanya gambar atau TXT untuk SLIK (tambahan PDF untuk dokumen instansi/agunan)
 const fileFilter = (req, file, cb) => {
   const imageTypes = [".jpg", ".jpeg", ".png"];
   const textTypes = [".txt"];
   const documentTypes = [".pdf"];
   const ext = path.extname(file.originalname).toLowerCase();
-  if (file.fieldname === "slik") {
+  const normalizedField = String(file.fieldname || "").toLowerCase();
+  const isSlikField = [
+    "slik",
+    "slikpenanggungjawab",
+    "slik_penanggung_jawab",
+    "slikpasangan",
+    "slik_pasangan",
+  ].includes(normalizedField);
+  if (isSlikField) {
     if (textTypes.includes(ext)) {
       cb(null, true);
       return;
     }
     cb(new Error("Hanya file TXT (.txt) yang diperbolehkan untuk SLIK"), false);
+    return;
+  }
+
+  if (file.fieldname === "dokumentasiAgunan") {
+    if (documentTypes.includes(ext)) {
+      cb(null, true);
+      return;
+    }
+    cb(
+      new Error("Hanya file PDF (.pdf) yang diperbolehkan untuk dokumen agunan"),
+      false
+    );
     return;
   }
 
@@ -55,10 +75,16 @@ const fileFilter = (req, file, cb) => {
   cb(new Error("Hanya file gambar (.jpg, .jpeg, .png) yang diperbolehkan"), false);
 };
 
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 },
-});
+const createUpload = (fileSizeLimit) =>
+  multer({
+    storage,
+    fileFilter,
+    limits: { fileSize: fileSizeLimit },
+  });
+
+const upload = createUpload(5 * 1024 * 1024);
+export const uploadJaminan = createUpload(30 * 1024 * 1024);
+export const uploadOCRKTP = createUpload(10 * 1024 * 1024);
+export const uploadCamera = createUpload(10 * 1024 * 1024);
 
 export default upload;
