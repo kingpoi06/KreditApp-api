@@ -50,6 +50,10 @@ const DataPermohonan = db.define(
       type: DataTypes.STRING(150),
       allowNull: true,
     },
+    sistemAngsuranKredit: {
+      type: DataTypes.STRING(150),
+      allowNull: true,
+    },
     keteranganUmum: {
       type: DataTypes.TEXT("long"),
       allowNull: true,

@@ -103,7 +103,7 @@ const resolveNoPermohonan = async (body) => {
 export const getDataInstansi = async (req, res) => {
   try {
     let response;
-    if (["superadmin", "officer", "ketuacabang", "komitecabang", "penyelia"].includes(req.role)) {
+    if (["superadmin", "officer", "ketuacabang", "komitecabang", "penyelia", "headofficer"].includes(req.role)) {
       const includeAccess = buildPermohonanAccessInclude(req);
       response = await Datainstansi.findAll({
         ...(includeAccess.length ? { include: includeAccess } : {}),
@@ -124,7 +124,7 @@ export const getDataInstansiByNoPermohonan = async (req, res) => {
   try {
     const noPermohonan =
       req.params.no_permohonan || req.params.idDataInstansiNasabah || req.params.uuid;
-    if (!["superadmin", "officer", "ketuacabang", "komitecabang", "penyelia"].includes(req.role)) {
+    if (!["superadmin", "officer", "ketuacabang", "komitecabang", "penyelia", "headofficer"].includes(req.role)) {
       return res.status(403).json({ msg: "Akses ditolak!" });
     }
 
@@ -243,3 +243,4 @@ export const deleteDataInstansi = async (req, res) => {
     res.status(500).json({ msg: "Terjadi kesalahan server" });
   }
 };
+

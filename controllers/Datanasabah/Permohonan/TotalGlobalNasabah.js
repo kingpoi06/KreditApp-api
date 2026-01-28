@@ -6,7 +6,7 @@ export const getDashboardALL = async (req, res) => {
   try {
     if (
       !req.kdkantor &&
-      !["superadmin", "dirut", "officer"].includes(req.role)
+      !["superadmin", "dirut", "officer", "headofficer"].includes(req.role)
     ) {
       return res.status(400).json({ msg: "Kode kantor tidak ditemukan" });
     }
@@ -16,7 +16,7 @@ export const getDashboardALL = async (req, res) => {
 
     if (req.role === "officer") {
       wherePermohonan.kdpegawai = req.userKdpegawai;
-    } else if (!["superadmin", "dirut"].includes(req.role)) {
+    } else if (!["superadmin", "dirut", "headofficer"].includes(req.role)) {
       whereUser.kdkantor = req.kdkantor;
     }
 
@@ -72,7 +72,7 @@ export const getDashboardByNoPermohonan = async (req, res) => {
   try {
     if (
       !req.kdkantor &&
-      !["superadmin", "dirut", "officer"].includes(req.role)
+      !["superadmin", "dirut", "officer", "headofficer"].includes(req.role)
     ) {
       return res.status(400).json({ msg: "Kode kantor tidak ditemukan" });
     }
@@ -82,7 +82,7 @@ export const getDashboardByNoPermohonan = async (req, res) => {
 
     if (req.role === "officer") {
       wherePermohonan.kdpegawai = req.userKdpegawai;
-    } else if (!["superadmin", "dirut"].includes(req.role)) {
+    } else if (!["superadmin", "dirut", "headofficer"].includes(req.role)) {
       whereUser.kdkantor = req.kdkantor;
     }
 
@@ -114,3 +114,4 @@ export const getDashboardByNoPermohonan = async (req, res) => {
     res.status(500).json({ msg: "Gagal" });
   }
 };
+

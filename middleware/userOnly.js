@@ -16,6 +16,8 @@ const normalizeRole = (value) => {
     accountofficer: "officer",
     stafbisnisaccountofficer: "officer",
     staffbisnisaccountofficer: "officer",
+    headofficer: "headofficer",
+    headoffider: "headofficer",
     ketuacabang: "ketuacabang",
     komitecabang: "komitecabang",
     penyelia: "penyelia",
@@ -51,10 +53,12 @@ const checkRole = (roles) => async (req, res, next) => {
 };
 
 export const superadminOnly = checkRole(["superadmin"]);
+export const superadminOrHeadOfficer = checkRole(["superadmin", "headofficer"]);
 export const officerOnly = checkRole(["officer"]);
 export const ketuacabangOnly = checkRole(["ketuacabang"]);
 export const dirutOnly = checkRole(["dirut"]);
-export const getAllOnly = checkRole(["superadmin", "officer", "admin", "komitecabang", "penyelia"]);
+export const getAllOnly = checkRole(["superadmin", "officer", "admin", "komitecabang", "penyelia", "headofficer"]);
 export const updateOnly = checkRole(["superadmin", "officer"]);
 export const updateOnlyWithAdmin = checkRole(["superadmin", "officer", "admin"]);
 export const getPrivateOnly = checkRole(["superadmin", "admmin", "dirut"]);
+

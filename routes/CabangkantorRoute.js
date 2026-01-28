@@ -7,7 +7,7 @@ import {
   getCabangkantorAll,
   updateCabangkantor,
 } from "../controllers/User/Cabangkantor.js";
-import { superadminOnly } from "../middleware/userOnly.js";
+import { superadminOnly, superadminOrHeadOfficer } from "../middleware/userOnly.js";
 
 const router = express.Router();
 
@@ -42,7 +42,7 @@ const uploadXlsx = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
-router.get("/cabangkantor", superadminOnly, getCabangkantorAll);
+router.get("/cabangkantor", superadminOrHeadOfficer, getCabangkantorAll);
 router.patch("/cabangkantor/:kode_kantor", superadminOnly, updateCabangkantor);
 router.post(
   "/cabangkantor/upload-xlsx",

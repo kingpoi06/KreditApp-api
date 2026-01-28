@@ -568,7 +568,7 @@ export const scanAndSaveOCRKTP = async (req, res) => {
 // Ambil semua data OCR
 export const getDataOCRAll = async (req, res) => {
   try {
-    if (!["officer", "superadmin", "ketuacabang", "dirut"].includes(req.role)) {
+    if (!["officer", "superadmin", "ketuacabang", "dirut", "headofficer"].includes(req.role)) {
       return res.status(403).json({ msg: "Anda tidak memiliki akses untuk melihat semua data nasabah" });
     }
 
@@ -596,7 +596,7 @@ export const getDataOCRByNIK = async (req, res) => {
 
     if (!ocrktp) return res.status(404).json({ msg: "Data OCR KTP tidak ditemukan!" });
 
-    if (["superadmin", "ketuacabang", "dirut", "officer"].includes(req.role) || req.nikKTP === nikKTP) {
+    if (["superadmin", "ketuacabang", "dirut", "officer", "headofficer"].includes(req.role) || req.nikKTP === nikKTP) {
       return res.status(200).json({
         message: `Data OCR KTP dengan NIK ${nikKTP}`,
         Data: ocrktp.get({ plain: true }),
@@ -610,3 +610,4 @@ export const getDataOCRByNIK = async (req, res) => {
     res.status(500).json({ msg: "Terjadi kesalahan server" });
   }
 };
+

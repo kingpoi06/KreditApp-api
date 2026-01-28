@@ -112,7 +112,7 @@ const buildPermohonanAccessInclude = (req) => {
 export const getDataJaminan = async (req, res) => {
   try {
     let response;
-    if (req.role === "superadmin" || req.role === "officer" || req.role == "ketuacabang" || req.role === "komitecabang" || req.role === "admin" || req.role === "penyelia") {
+    if (req.role === "superadmin" || req.role === "officer" || req.role == "ketuacabang" || req.role === "komitecabang" || req.role === "admin" || req.role === "penyelia" || req.role === "headofficer") {
       const includeAccess = buildPermohonanAccessInclude(req);
       response = await Datajaminan.findAll({
         ...(includeAccess.length ? { include: includeAccess } : {}),
@@ -135,7 +135,7 @@ export const getDataJaminanByUUID = async (req, res) => {
   try {
     const noPermohonan =
       req.params.no_permohonan || req.params.uuid || req.params.idDataJaminan;
-    if (req.role !== "superadmin" && req.role !== "officer" && req.role !== "ketuacabang" && req.role !== "komitecabang" && req.role !== "admin" && req.role !== "penyelia") {
+    if (req.role !== "superadmin" && req.role !== "officer" && req.role !== "ketuacabang" && req.role !== "komitecabang" && req.role !== "admin" && req.role !== "penyelia" && req.role !== "headofficer") {
       return res.status(403).json({ msg: "Akses ditolak!" });
     }
 
@@ -468,3 +468,4 @@ export const deleteDataJaminan = async (req, res) => {
     res.status(500).json({ msg: "Terjadi kesalahan server" });
   }
 };
+

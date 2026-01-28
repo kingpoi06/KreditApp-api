@@ -8,7 +8,7 @@ import db from "../../../config/Database.js";
 
 export const getPermohonanALL = async (req, res) => {
   try {
-    if (!["officer", "superadmin", "ketuacabang", "komitecabang", "admin", "penyelia"].includes(req.role)) {
+    if (!["officer", "superadmin", "ketuacabang", "komitecabang", "admin", "penyelia", "headofficer"].includes(req.role)) {
       return res.status(403).json({ msg: "Akses ditolak" });
     }
 
@@ -17,7 +17,7 @@ export const getPermohonanALL = async (req, res) => {
 
     if (req.role === "officer") {
       wherePermohonan.kdpegawai = req.userKdpegawai;
-    } else if (!["superadmin", "dirut"].includes(req.role)) {
+    } else if (!["superadmin", "dirut", "headofficer"].includes(req.role)) {
       whereUser.kdkantor = req.kdkantor;
     }
 
@@ -54,7 +54,7 @@ export const getPermohonanByNoPermohonan = async (req, res) => {
 
     if (req.role === "officer") {
       wherePermohonan.kdpegawai = req.userKdpegawai;
-    } else if (!["superadmin", "dirut"].includes(req.role)) {
+    } else if (!["superadmin", "dirut", "headofficer"].includes(req.role)) {
       whereUser.kdkantor = req.kdkantor;
     }
 
@@ -74,7 +74,7 @@ export const getPermohonanByNoPermohonan = async (req, res) => {
     }
 
     if (
-      !["officer", "superadmin", "ketuacabang", "komitecabang", "penyelia"].includes(req.role) &&
+      !["officer", "superadmin", "ketuacabang", "komitecabang", "penyelia", "headofficer"].includes(req.role) &&
       permohonan.User.kdkantor !== req.kdkantor
     ) {
       return res.status(403).json({ msg: "Akses lintas kantor ditolak" });
@@ -137,6 +137,35 @@ export const updatePermohonanNasabah = async (req, res) => {
       return status;
     };
 
+    const normalizeOptionalInt = (value) => {
+      if (value === "" || value === null || value === undefined) return null;
+      if (typeof value === "number") {
+        return Number.isFinite(value) ? Math.trunc(value) : value;
+      }
+      let raw = String(value ?? "").trim();
+      if (!raw) return null;
+      raw = raw.replace(/[^\d,.-]/g, "");
+      if (!raw) return null;
+      if (raw.includes(",") && raw.includes(".")) {
+        raw = raw.replace(/\./g, "").replace(",", ".");
+      } else if (raw.includes(",")) {
+        raw = raw.replace(",", ".");
+      } else if (raw.includes(".")) {
+        const dotCount = (raw.match(/\./g) || []).length;
+        if (dotCount > 1) {
+          raw = raw.replace(/\./g, "");
+        } else {
+          const parts = raw.split(".");
+          if (parts.length === 2 && parts[1].length === 3) {
+            raw = parts.join("");
+          }
+        }
+      }
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed)) return value;
+      return Math.trunc(parsed);
+    };
+
     const role = String(req.role || "").toLowerCase();
     const updateFields = {
       jenisKredit: req.body.jenisKredit,
@@ -147,21 +176,26 @@ export const updatePermohonanNasabah = async (req, res) => {
       plafonPermohonan: req.body.plafonPermohonan,
       sukuBunga: req.body.sukuBunga ?? req.body.sukuBungaTahun,
       jenisPerhitungan: req.body.jenisPerhitungan ?? req.body.perhitunganBunga,
-      namaAsuransi: req.body.namaAsuransi,
-      premi: req.body.premi,
-      namaNotaris: req.body.namaNotaris,
-      biayaAPHT: req.body.biayaAPHT,
       caraPengembalianKredit: req.body.caraPengembalianKredit,
     };
 
     if (role === "penyelia") {
+      updateFields.plafonPermohonanPenyelia = normalizeOptionalInt(
+        req.body.plafonPermohonanPenyelia ?? req.body.plafonPermohonan
+      );
+      updateFields.sukuBungaPenyelia = normalizeOptionalInt(
+        req.body.sukuBungaPenyelia ?? req.body.sukuBunga ?? req.body.sukuBungaTahun
+      );
+      updateFields.jenisPerhitunganPenyelia =
+        req.body.jenisPerhitunganPenyelia ??
+        req.body.jenisPerhitungan ??
+        req.body.perhitunganBunga;
       const allowedFields = new Set([
         "keteranganPengajuan",
         "statusPermohonan",
-        "namaAsuransi",
-        "premi",
-        "namaNotaris",
-        "biayaAPHT",
+        "plafonPermohonanPenyelia",
+        "sukuBungaPenyelia",
+        "jenisPerhitunganPenyelia",
       ]);
       Object.keys(updateFields).forEach((key) => {
         if (!allowedFields.has(key)) {
@@ -245,3 +279,4 @@ export const deletePermohonanNasabah = async (req, res) => {
     res.status(500).json({ msg: "Terjadi kesalahan server" });
   }
 };
+

@@ -227,7 +227,7 @@ const resolveDatadiriWhere = (paramValue) => {
 
 export const getDatadiriAll = async (req, res) => {
   try {
-    if (!["officer", "superadmin", "ketuacabang", "komitecabang", "admin", "penyelia"].includes(req.role)) {
+    if (!["officer", "superadmin", "ketuacabang", "komitecabang", "admin", "penyelia", "headofficer"].includes(req.role)) {
       return res.status(403).json({ msg: "Akses ditolak" });
     }
 
@@ -237,7 +237,7 @@ export const getDatadiriAll = async (req, res) => {
     // 🔐 FILTER KANTOR (KECUALI SUPERADMIN & DIRUT)
     if (req.role === "officer") {
       wherePermohonan.kdpegawai = req.userKdpegawai;
-    } else if (!["superadmin", "dirut"].includes(req.role)) {
+    } else if (!["superadmin", "dirut", "headofficer"].includes(req.role)) {
       whereUser.kdkantor = req.kdkantor;
     }
 
@@ -284,7 +284,7 @@ export const getDataDiriByNIK = async (req, res) => {
     const whereUser = {};
     if (req.role === "officer") {
       wherePermohonan.kdpegawai = req.userKdpegawai;
-    } else if (!["superadmin", "dirut"].includes(req.role)) {
+    } else if (!["superadmin", "dirut", "headofficer"].includes(req.role)) {
       whereUser.kdkantor = req.kdkantor;
     }
 
@@ -313,7 +313,7 @@ export const getDataDiriByNIK = async (req, res) => {
 
     const userInfo = datadiri.Permohonan?.User;
     if (
-      !["officer", "superadmin", "ketuacabang", "komitecabang", "penyelia"].includes(req.role) &&
+      !["officer", "superadmin", "ketuacabang", "komitecabang", "penyelia", "headofficer"].includes(req.role) &&
       userInfo?.kdkantor !== req.kdkantor
     ) {
       return res.status(403).json({ msg: "Akses lintas kantor ditolak" });
@@ -637,3 +637,4 @@ export const deleteDataDiriNasabah = async (req, res) => {
     return res.status(500).json({ msg: "Terjadi kesalahan server", error: error.message });
   }
 };
+

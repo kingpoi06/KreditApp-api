@@ -55,27 +55,17 @@ const Permohonan = db.define(
       type: DataTypes.STRING(50),
       allowNull: true,
     },
-    namaAsuransi: {
-      type: DataTypes.STRING(100),
+    plafonPermohonanPenyelia: {
+      type: DataTypes.INTEGER(50),
       allowNull: true,
     },
-    premi: {
-      type: DataTypes.INTEGER(100),
-      allowNull: true,
-      validate: {
-        isInt: true,
-      },
-    },
-    namaNotaris: {
-      type: DataTypes.STRING(100),
+    sukuBungaPenyelia: {
+      type: DataTypes.INTEGER(20),
       allowNull: true,
     },
-    biayaAPHT: {
-      type: DataTypes.INTEGER(100),
+    jenisPerhitunganPenyelia: {
+      type: DataTypes.STRING(50),
       allowNull: true,
-      validate: {
-        isInt: true,
-      },
     },
     caraPengembalianKredit: {
       type: DataTypes.STRING(150),

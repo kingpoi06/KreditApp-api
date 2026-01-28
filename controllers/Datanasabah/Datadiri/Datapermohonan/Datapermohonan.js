@@ -20,6 +20,7 @@ const normalizePayload = (body) => ({
   perhitunganBunga: toNumber(body.perhitunganBunga),
   sumberPengembalian: body.sumberPengembalian,
   caraAngsuranKredit: body.caraAngsuranKredit,
+  sistemAngsuranKredit: body.sistemAngsuranKredit,
   keteranganUmum: body.keteranganUmum,
 });
 

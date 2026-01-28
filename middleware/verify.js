@@ -19,6 +19,8 @@ const normalizeRole = (value) => {
     accountofficer: "officer",
     stafbisnisaccountofficer: "officer",
     staffbisnisaccountofficer: "officer",
+    headofficer: "headofficer",
+    headoffider: "headofficer",
     ketuacabang: "ketuacabang",
     komitecabang: "komitecabang",
     penyelia: "penyelia",
@@ -81,3 +83,4 @@ export const verifyToken = (req, res, next) => {
     next();
   });
 };
+

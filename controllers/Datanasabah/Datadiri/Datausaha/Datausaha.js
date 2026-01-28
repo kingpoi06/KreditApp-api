@@ -94,7 +94,7 @@ const buildPermohonanAccessInclude = (req) => {
 export const getDataUsaha = async (req, res) => {
   try {
     let response;
-    if (["superadmin", "officer", "ketuacabang", "komitecabang", "penyelia"].includes(req.role)) {
+    if (["superadmin", "officer", "ketuacabang", "komitecabang", "penyelia", "headofficer"].includes(req.role)) {
       const includeAccess = buildPermohonanAccessInclude(req);
       response = await Datausaha.findAll({
         ...(includeAccess.length ? { include: includeAccess } : {}),
@@ -117,7 +117,7 @@ export const getDatausahaByID = async (req, res) => {
   try {
     const noPermohonan =
       req.params.no_permohonan || req.params.idDataUsahaNasabah || req.params.uuid;
-    if (!["superadmin", "officer", "ketuacabang", "komitecabang", "penyelia"].includes(req.role)) {
+    if (!["superadmin", "officer", "ketuacabang", "komitecabang", "penyelia", "headofficer"].includes(req.role)) {
       return res.status(403).json({ msg: "Akses ditolak!" });
     }
 
@@ -349,3 +349,4 @@ export const deleteDataUsaha = async (req, res) => {
     res.status(500).json({ msg: "Terjadi kesalahan server" });
   }
 };
+
